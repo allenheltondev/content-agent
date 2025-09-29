@@ -1,3 +1,6 @@
+.aws-sam/
+samconfig.toml
+test.mjs
 # Logs
 logs
 *.log
