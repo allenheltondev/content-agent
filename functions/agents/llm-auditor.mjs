@@ -7,7 +7,7 @@ const tools = convertToBedrockTools([saveLlmAuditTool, createSuggestionsTool]);
 const AGENT_ID = 'llm-auditor';
 export const handler = async (event) => {
   try {
-    const { tenantId, sessionId, contentId } = event;
+    const { tenantId, sessionId, contentId } = event.detail;
     const actorId = `${AGENT_ID}/${tenantId}/${contentId}`;
     const content = await loadContent(tenantId, contentId);
 
@@ -59,6 +59,7 @@ Proceed:
 1) Score and prepare audit.
 2) Call saveLlmAudit (always). If offsets are available and you prepared patches, call createSuggestions afterward with at most 10 items.
 3) If no further action is needed, return a concise confirmation message.
+4) If action is needed, return a concise message indicating how many suggestions you made but do not include information about them.
 `;
 
 const userPrompt = `
@@ -66,7 +67,7 @@ contentId: ${contentId}
 content:
 ${content.body}
 `
-    const response = await converse('amazon.nova-pro-v1:0', systemPrompt, userPrompt, tools, {
+    const response = await converse('openai.gpt-oss-20b-1:0', systemPrompt, userPrompt, tools, {
       tenantId,
       sessionId,
       actorId

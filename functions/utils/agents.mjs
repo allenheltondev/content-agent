@@ -44,6 +44,7 @@ export const converse = async (model, systemPrompt, userPrompt, tools, options) 
       const textItems = messageContent.filter(item => 'text' in item && !!item.text);
 
       if (toolUseItems.length) {
+        const message = { role: 'user', content: [] };
         for (const toolUseItem of toolUseItems) {
           const { toolUse } = toolUseItem;
           const { name: toolName, input: toolInput, toolUseId } = toolUse;
@@ -66,17 +67,15 @@ export const converse = async (model, systemPrompt, userPrompt, tools, options) 
           } catch (toolError) {
             toolResult = { error: toolError.message };
           }
-
+          console.log(toolResult);
           const toolResultBlock = {
             toolUseId,
             content: [{ text: JSON.stringify(toolResult) }]
           };
 
-          messages.push({
-            role: 'user',
-            content: [{ toolResult: toolResultBlock }]
-          });
+          message.content.push({ toolResult: toolResultBlock });
         }
+        messages.push(message);
       } else if (textItems.length > 0) {
         finalResponse = textItems.map(item => item.text).join('');
         break;
@@ -148,13 +147,13 @@ const addToConversation = async (sessionId, actorId, messages) => {
       return null; //intentionally omit tool result messages because they bloat the conversation
     }
   }).filter(msg => msg !== null);
-  console.log(JSON.stringify(agentCoreMessages));
   const memoryId = await getMemoryId();
   await ac.send(new CreateEventCommand({
     memoryId,
     actorId,
     sessionId,
-    payload: agentCoreMessages.map(msg => msg)
+    eventTimestamp: new Date(),
+    payload: agentCoreMessages.map(msg => { return { conversational: msg }; })
   }));
 };
 

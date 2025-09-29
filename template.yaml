@@ -116,7 +116,7 @@ Resources:
         Variables:
           MEMORY_PARAMETER: !Ref AgentMemoryParameter
 
-  TestAgentFunction:
+  LLMAuditAgent:
     Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: esbuild
@@ -147,8 +147,66 @@ Resources:
             - Effect: Allow
               Action: bedrock:InvokeModel
               Resource:
-                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-pro-v1:0
+                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/openai.gpt-oss-20b-1:0
       Environment:
         Variables:
           MEMORY_PARAMETER: !Ref AgentMemoryParameter
           TABLE_NAME: !Ref ContentTable
+      Events:
+        Scatter:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - content-agent
+              detail-type:
+                - Start Content Analysis
+
+  BrandAuditAgent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - agents/on-brand-auditor.mjs
+    Properties:
+      Handler: agents/on-brand-auditor.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/agents/memory"
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:CreateEvent
+                - bedrock-agentcore:ListEvents
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: !GetAtt ContentTable.Arn
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-lite-v1:0
+            - Effect: Allow
+              Action: bedrock-agentcore:RetrieveMemoryRecords
+              Resource: "*"
+      Environment:
+        Variables:
+          MEMORY_PARAMETER: !Ref AgentMemoryParameter
+          TABLE_NAME: !Ref ContentTable
+      Events:
+        Scatter:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - content-agent
+              detail-type:
+                - Start Content Analysis
