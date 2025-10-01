@@ -32,7 +32,7 @@ export const ConfirmationModal = ({
       case 'success':
         return <CheckCircleIcon className="h-6 w-6 text-green-500" />;
       case 'submit':
-        return <PaperAirplaneIcon className="h-6 w-6 text-blue-500" />;
+        return <PaperAirplaneIcon className="h-6 w-6 text-primary" />;
       case 'warning':
       default:
         return <ExclamationTriangleIcon className="h-6 w-6 text-amber-500" />;
@@ -47,7 +47,7 @@ export const ConfirmationModal = ({
         return 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500';
       case 'info':
       default:
-        return 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500';
+        return 'bg-primary hover:bg-primary-hover focus:ring-primary';
     }
   };
 
@@ -91,7 +91,7 @@ export const ConfirmationModal = ({
           <button
             onClick={handleCancel}
             disabled={isLoading}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {cancelText}
           </button>

@@ -8,3 +8,5 @@ export { LoadingState, InlineLoading, ButtonLoading } from './LoadingState';
 export { RetryButton, useRetryMechanism } from './RetryButton';
 export { Toast, ToastContainer } from './Toast';
 export { ConfirmationModal } from './ConfirmationModal';
+export { Logo } from './Logo';
+export { InfoBox } from './InfoBox';

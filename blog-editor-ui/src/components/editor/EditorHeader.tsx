@@ -57,7 +57,7 @@ export const EditorHeader = ({
   const SaveStatus = () => {
     if (isSaving) {
       return (
-        <div className="flex items-center text-sm text-blue-600">
+        <div className="flex items-center text-sm text-primary">
           <CloudArrowUpIcon className="h-4 w-4 mr-1 animate-pulse" />
           Auto-saving...
         </div>
@@ -120,7 +120,7 @@ export const EditorHeader = ({
           <button
             onClick={onSave}
             disabled={!isDirty || isSaving}
-            className="order-1 sm:order-2 w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="order-1 sm:order-2 w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Save now (Ctrl+S)"
           >
             <CloudArrowUpIcon className="h-4 w-4 mr-1" />

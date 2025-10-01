@@ -186,7 +186,7 @@ export const ContentEditorWithSuggestions = ({
       {showSuggestions && suggestions.length > 0 && (
         <div className="absolute top-4 right-6 z-10">
           <div className="flex items-center space-x-2 bg-white rounded-full px-3 py-1 shadow-sm border border-gray-200">
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+            <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
             <span className="text-xs text-gray-600 font-medium">
               {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''}
             </span>

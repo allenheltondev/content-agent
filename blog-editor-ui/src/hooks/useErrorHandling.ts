@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useToastContext } from '../contexts/ToastContext';
 import { getErrorMessage, isRetryableError, requiresReauth, logError } from '../utils/apiErrorHandler';
 import { useAuth } from './useAuth';
@@ -25,7 +26,8 @@ interface ErrorState {
  */
 export const useErrorHandling = (options: ErrorHandlingOptions = {}) => {
   const { showError, showWarning } = useToastContext();
-  const { login } = useAuth();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [errorState, setErrorState] = useState<ErrorState>({
     error: null,
     isRetryable: false,
@@ -96,12 +98,14 @@ export const useErrorHandling = (options: ErrorHandlingOptions = {}) => {
 
   const handleAuthError = useCallback(async () => {
     try {
-      await login();
+      // Clear user session and redirect to login
+      await logout();
+      navigate('/login');
       clearError();
     } catch (authError) {
       handleError(authError as Error, { context: 'Authentication failed' });
     }
-  }, [login, clearError, handleError]);
+  }, [logout, navigate, clearError, handleError]);
 
   const retry = useCallback(async (operation: () => Promise<void>, maxRetries = 3) => {
     if (errorState.retryCount >= maxRetries) {
@@ -173,25 +177,44 @@ export const useAsyncOperation = <T = any>(options: ErrorHandlingOptions = {}) =
     maxRetries = 3,
     operationOptions?: Partial<ErrorHandlingOptions>
   ): Promise<T | null> => {
+    let lastError: Error | null = null;
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const result = await execute(operation, {
         ...operationOptions,
-        showToast: attempt === maxRetries // Only show toast on final failure
+        showToast: false // Don't show toast during retries
       });
 
-      if (result !== null || !errorHandling.isRetryable) {
+      if (result !== null) {
         return result;
+      }
+
+      // Store the last error for final failure handling
+      lastError = errorHandling.error;
+
+      // Don't retry if error is not retryable
+      if (!errorHandling.isRetryable) {
+        break;
       }
 
       // Wait before retry with exponential backoff
       if (attempt < maxRetries) {
         const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
         await new Promise(resolve => setTimeout(resolve, delay));
+        errorHandling.clearError(); // Clear error before retry
       }
     }
 
+    // All retries exhausted - show final error
+    if (lastError && (operationOptions?.showToast !== false)) {
+      errorHandling.handleError(
+        new Error(`Failed after ${maxRetries + 1} attempts: ${lastError.message}`),
+        { ...operationOptions, showToast: true }
+      );
+    }
+
     return null;
-  }, [execute, errorHandling.isRetryable]);
+  }, [execute, errorHandling]);
 
   return {
     loading,

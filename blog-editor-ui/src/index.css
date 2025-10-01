@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Betterer Brand Colors */
+:root {
+  --color-primary: #219EFF;
+  --color-primary-hover: #1e8ae6;
+  --color-secondary: #FFB02E;
+  --color-secondary-hover: #e69a29;
+  --color-tertiary: #2B2D42;
+}
+
 /* Responsive typography and touch improvements */
 @layer base {
   html {

@@ -34,14 +34,14 @@ export const LoadingState = ({
 
   const renderDots = () => (
     <div className="flex space-x-1">
-      <div className={`bg-blue-600 rounded-full animate-bounce ${size === 'sm' ? 'h-2 w-2' : size === 'md' ? 'h-3 w-3' : 'h-4 w-4'}`} style={{ animationDelay: '0ms' }} />
-      <div className={`bg-blue-600 rounded-full animate-bounce ${size === 'sm' ? 'h-2 w-2' : size === 'md' ? 'h-3 w-3' : 'h-4 w-4'}`} style={{ animationDelay: '150ms' }} />
-      <div className={`bg-blue-600 rounded-full animate-bounce ${size === 'sm' ? 'h-2 w-2' : size === 'md' ? 'h-3 w-3' : 'h-4 w-4'}`} style={{ animationDelay: '300ms' }} />
+      <div className={`bg-primary rounded-full animate-bounce ${size === 'sm' ? 'h-2 w-2' : size === 'md' ? 'h-3 w-3' : 'h-4 w-4'}`} style={{ animationDelay: '0ms' }} />
+      <div className={`bg-primary rounded-full animate-bounce ${size === 'sm' ? 'h-2 w-2' : size === 'md' ? 'h-3 w-3' : 'h-4 w-4'}`} style={{ animationDelay: '150ms' }} />
+      <div className={`bg-primary rounded-full animate-bounce ${size === 'sm' ? 'h-2 w-2' : size === 'md' ? 'h-3 w-3' : 'h-4 w-4'}`} style={{ animationDelay: '300ms' }} />
     </div>
   );
 
   const renderPulse = () => (
-    <div className={`bg-blue-600 rounded-full animate-pulse ${sizeClasses[size]}`} />
+    <div className={`bg-primary rounded-full animate-pulse ${sizeClasses[size]}`} />
   );
 
   const renderSkeleton = () => (

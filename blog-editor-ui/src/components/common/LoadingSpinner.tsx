@@ -17,7 +17,7 @@ export const LoadingSpinner = ({
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="text-center">
         <div
-          className={`animate-spin rounded-full border-b-2 border-blue-600 mx-auto ${sizeClasses[size]}`}
+          className={`animate-spin rounded-full border-b-2 border-primary mx-auto ${sizeClasses[size]}`}
         />
         <p className="mt-4 text-sm sm:text-base text-gray-600">{message}</p>
       </div>

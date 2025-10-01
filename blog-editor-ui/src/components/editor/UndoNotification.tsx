@@ -135,7 +135,7 @@ export const UndoNotification = ({
         <div className="flex items-center justify-between">
           <button
             onClick={handleUndo}
-            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+            className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 rounded-md hover:bg-primary/20 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-colors"
           >
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
@@ -147,7 +147,7 @@ export const UndoNotification = ({
             <span>Auto-dismiss in {timeLeft}s</span>
             <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-blue-500 transition-all duration-1000 ease-linear"
+                className="h-full bg-primary transition-all duration-1000 ease-linear"
                 style={{
                   width: `${(timeLeft / (autoHideDelay / 1000)) * 100}%`
                 }}

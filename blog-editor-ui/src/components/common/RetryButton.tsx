@@ -47,8 +47,8 @@ export const RetryButton = ({
   };
 
   const variantClasses = {
-    primary: 'text-white bg-blue-600 hover:bg-blue-700 focus:ring-blue-500 disabled:bg-blue-300',
-    secondary: 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500 disabled:bg-gray-100',
+    primary: 'text-white bg-primary hover:bg-primary-hover focus:ring-primary disabled:bg-primary/50',
+    secondary: 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-primary disabled:bg-gray-100',
     danger: 'text-white bg-red-600 hover:bg-red-700 focus:ring-red-500 disabled:bg-red-300'
   };
 

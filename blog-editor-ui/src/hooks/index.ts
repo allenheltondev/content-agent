@@ -4,3 +4,5 @@ export { useToast } from './useToast';
 export { useAutoSave } from './useAutoSave';
 export { useDraftPersistence } from './useDraftPersistence';
 export { useErrorHandling, useAsyncOperation } from './useErrorHandling';
+export { usePageTitle } from './usePageTitle';
+export { useInfoBoxManager } from './useInfoBoxManager';

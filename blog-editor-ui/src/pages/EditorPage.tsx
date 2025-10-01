@@ -6,6 +6,7 @@ import { useToast } from '../hooks/useToast';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useDraftPersistence } from '../hooks/useDraftPersistence';
 import { useSuggestionManager } from '../hooks/useSuggestionManager';
+import { usePageTitle } from '../hooks/usePageTitle';
 import { EditorHeader } from '../components/editor/EditorHeader';
 import { ContentEditor } from '../components/editor/ContentEditor';
 import { SuggestionList } from '../components/editor/SuggestionList';
@@ -14,8 +15,10 @@ import { SuggestionStats } from '../components/editor/SuggestionStats';
 import { UndoNotification } from '../components/editor/UndoNotification';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
+import { InfoBox } from '../components/common';
 import { DraftRecoveryNotification } from '../components/editor/DraftRecoveryNotification';
 import { ConflictResolutionModal } from '../components/editor/ConflictResolutionModal';
+import { useInfoBoxManager } from '../hooks/useInfoBoxManager';
 import {
   detectConflict,
   createConflictData,
@@ -28,6 +31,10 @@ export const EditorPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
+  const { isDismissed, dismissInfoBox } = useInfoBoxManager();
+
+  // Set page title
+  usePageTitle('Editor');
 
   const [post, setPost] = useState<BlogPost | null>(null);
   const [content, setContent] = useState('');
@@ -433,7 +440,7 @@ export const EditorPage = () => {
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Post Not Found</h1>
           <button
             onClick={() => navigate('/dashboard')}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover"
           >
             ← Back to Dashboard
           </button>
@@ -510,6 +517,39 @@ export const EditorPage = () => {
         </div>
 
         <div className="px-4 sm:px-6 lg:px-8 py-4">
+          {/* Editor guidance info box */}
+          {!isDismissed('editor-guidance') && (
+            <InfoBox
+              id="editor-guidance"
+              type="tip"
+              title="Editor Tips & AI Suggestions"
+              content={
+                <div className="space-y-2">
+                  <p>Make the most of your writing experience:</p>
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    <li><strong>Auto-save</strong> - Your changes are automatically saved as you type</li>
+                    <li><strong>AI Suggestions</strong> - Submit for review to get intelligent feedback on grammar, style, and content</li>
+                    <li><strong>Suggestion Types</strong> - Look for color-coded suggestions:
+                      <span className="inline-block ml-1">
+                        <span className="inline-block w-3 h-3 bg-blue-200 border border-blue-400 rounded mr-1"></span>LLM,
+                        <span className="inline-block w-3 h-3 bg-purple-200 border border-purple-400 rounded mx-1"></span>Brand,
+                        <span className="inline-block w-3 h-3 bg-orange-200 border border-orange-400 rounded mx-1"></span>Fact,
+                        <span className="inline-block w-3 h-3 bg-green-200 border border-green-400 rounded mx-1"></span>Grammar,
+                        <span className="inline-block w-3 h-3 bg-red-200 border border-red-400 rounded mx-1"></span>Spelling
+                      </span>
+                    </li>
+                    <li><strong>Keyboard Shortcuts</strong> - Use Ctrl+S (Cmd+S) to manually save</li>
+                  </ul>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Ready to make your words betterer? Start writing! ✍️
+                  </p>
+                </div>
+              }
+              onDismiss={() => dismissInfoBox('editor-guidance')}
+              className="mb-4"
+            />
+          )}
+
           <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
             {/* Main editor area */}
             <div className="flex-1 min-w-0">
@@ -548,7 +588,7 @@ export const EditorPage = () => {
                 {suggestionsLoading && (
                   <div className="bg-white border border-gray-200 rounded-lg p-4">
                     <div className="flex items-center space-x-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                       <span className="text-sm text-gray-600">Loading suggestions...</span>
                     </div>
                   </div>

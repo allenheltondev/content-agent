@@ -57,7 +57,7 @@ export class AuthService {
   static async getAuthToken(): Promise<string> {
     try {
       const session = await fetchAuthSession();
-      const token = session.tokens?.idToken?.toString();
+      const token = session.tokens?.accessToken?.toString();
 
       if (!token) {
         throw new Error('No authentication token available');

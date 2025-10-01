@@ -3,6 +3,11 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Autonomous AI Agent that proofreads and helps with blog posts
 
+Parameters:
+  Origin:
+    Type: String
+    Default: "http://localhost:5173"
+
 Metadata:
   esbuild-properties: &esbuild-properties
     Format: esm
@@ -15,7 +20,8 @@ Metadata:
       - index.mjs
     Banner:
       - js=import { createRequire } from 'module'; const require = createRequire(import.meta.url);
-    External: []
+    External:
+      - "@aws-sdk/*"
     Loader: []
 
 Globals:
@@ -30,6 +36,12 @@ Globals:
     Environment:
       Variables:
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+        ORIGIN: !Ref Origin
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: !Sub "'${Origin}'"
 
 Resources:
   ContentTable:
@@ -81,6 +93,54 @@ Resources:
       Type: String
       Value: placeholder
 
+  BlogUserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Delete
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-user-pool"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: tenantId
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+      LambdaConfig:
+        PostConfirmation: !GetAtt PostConfirmationTrigger.Arn
+        PreTokenGeneration: !GetAtt PreTokenGenerationTrigger.Arn
+      UserPoolTags:
+        Project: BlogAPI
+
+  BlogUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref BlogUserPool
+      ClientName: !Sub "${AWS::StackName}-client"
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+
   CreateAgentMemory:
     Type: AWS::CloudFormation::CustomResource
     Properties:
@@ -115,6 +175,77 @@ Resources:
       Environment:
         Variables:
           MEMORY_PARAMETER: !Ref AgentMemoryParameter
+
+  PostConfirmationTrigger:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - auth/post-confirmation.mjs
+    Properties:
+      Handler: auth/post-confirmation.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminUpdateUserAttributes
+              Resource: !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*"
+
+  PostConfirmationTriggerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PostConfirmationTrigger
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${BlogUserPool}"
+
+  PreTokenGenerationTrigger:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - auth/pre-token-generation.mjs
+    Properties:
+      Handler: auth/pre-token-generation.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+
+  PreTokenGenerationTriggerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PreTokenGenerationTrigger
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${BlogUserPool}"
+
+  BlogApiAuthorizer:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - auth/authorizer.mjs
+    Properties:
+      Handler: auth/authorizer.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:GetUser
+              Resource: "*"
+      Environment:
+        Variables:
+          USER_POOL_ID: !Ref BlogUserPool
+          USER_POOL_CLIENT_ID: !Ref BlogUserPoolClient
 
   LLMAuditAgent:
     Type: AWS::Serverless::Function
@@ -210,3 +341,295 @@ Resources:
                 - content-agent
               detail-type:
                 - Start Content Analysis
+
+  # Blog API Lambda Functions
+  ListPostsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/list-posts.mjs
+    Properties:
+      Handler: api/list-posts.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !GetAtt ContentTable.Arn
+                - !Sub "${ContentTable.Arn}/index/GSI1"
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /posts
+            Method: GET
+
+  GetPostFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/get-post.mjs
+    Properties:
+      Handler: api/get-post.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /posts/{id}
+            Method: GET
+
+  CreatePostFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/create-post.mjs
+    Properties:
+      Handler: api/create-post.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /posts
+            Method: POST
+
+  UpdatePostFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/update-post.mjs
+    Properties:
+      Handler: api/update-post.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /posts/{id}
+            Method: PUT
+
+  DeletePostFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/delete-post.mjs
+    Properties:
+      Handler: api/delete-post.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:DeleteItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /posts/{id}
+            Method: DELETE
+
+  GetSuggestionsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/get-suggestions.mjs
+    Properties:
+      Handler: api/get-suggestions.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /posts/{id}/suggestions
+            Method: GET
+
+  DeleteSuggestionFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/delete-suggestion.mjs
+    Properties:
+      Handler: api/delete-suggestion.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:DeleteItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /suggestions/{id}
+            Method: DELETE
+
+  BlogApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: api
+      Auth:
+        DefaultAuthorizer: LambdaAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          LambdaAuthorizer:
+            FunctionPayloadType: REQUEST
+            FunctionArn: !GetAtt BlogApiAuthorizer.Arn
+            Identity:
+              Headers:
+                - Authorization
+      MethodSettings:
+        - MetricsEnabled: True
+          ResourcePath: "/*"
+          HttpMethod: "*"
+          LoggingLevel: ERROR
+          DataTraceEnabled: True
+      DefinitionBody:
+        Fn::Transform:
+          Name: AWS::Include
+          Parameters:
+            Location: ./openapi.yaml
+
+  BlogApiAuthorizerInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AuthorizerInvokePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt BlogApiAuthorizer.Arn
+Outputs:
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref BlogUserPool
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolId"
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref BlogUserPoolClient
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolClientId"
+
+  ContentTableName:
+    Description: DynamoDB Content Table Name
+    Value: !Ref ContentTable
+    Export:
+      Name: !Sub "${AWS::StackName}-ContentTableName"
+
+  BlogApiAuthorizerArn:
+    Description: Blog API Lambda Authorizer ARN
+    Value: !GetAtt BlogApiAuthorizer.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-BlogApiAuthorizerArn"
+
+  BlogApiUrl:
+    Description: Blog API Gateway URL
+    Value: !Sub "https://${BlogApi}.execute-api.${AWS::Region}.amazonaws.com/api"
+    Export:
+      Name: !Sub "${AWS::StackName}-BlogApiUrl"

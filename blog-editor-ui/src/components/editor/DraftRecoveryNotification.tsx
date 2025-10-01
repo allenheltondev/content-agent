@@ -45,25 +45,25 @@ export const DraftRecoveryNotification = ({
   };
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+    <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mb-4">
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-3 flex-1">
-          <DocumentTextIcon className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+          <DocumentTextIcon className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <div className="flex items-center space-x-2 mb-1">
-              <h3 className="text-sm font-medium text-blue-900">Draft Found</h3>
-              <div className="flex items-center text-xs text-blue-600">
+              <h3 className="text-sm font-medium text-tertiary">Draft Found</h3>
+              <div className="flex items-center text-xs text-primary">
                 <ClockIcon className="h-3 w-3 mr-1" />
                 {formatTimestamp(draftData.timestamp)}
               </div>
             </div>
 
-            <p className="text-sm text-blue-700 mb-3">
+            <p className="text-sm text-tertiary mb-3">
               We found unsaved changes from your previous editing session. Would you like to recover them?
             </p>
 
             {/* Preview */}
-            <div className="bg-white border border-blue-200 rounded p-3 mb-3">
+            <div className="bg-white border border-primary/30 rounded p-3 mb-3">
               {draftData.title && (
                 <div className="mb-2">
                   <div className="text-xs font-medium text-gray-500 mb-1">Title:</div>
@@ -83,7 +83,7 @@ export const DraftRecoveryNotification = ({
                   {draftData.content.length > 150 && (
                     <button
                       onClick={() => setIsExpanded(!isExpanded)}
-                      className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                      className="text-xs text-primary hover:text-primary-hover mt-1"
                     >
                       {isExpanded ? 'Show less' : 'Show more'}
                     </button>
@@ -96,14 +96,14 @@ export const DraftRecoveryNotification = ({
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => onRecover(draftData)}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
                 Recover Draft
               </button>
 
               <button
                 onClick={onDiscard}
-                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
               >
                 Discard
               </button>
@@ -120,7 +120,7 @@ export const DraftRecoveryNotification = ({
 
         <button
           onClick={onDismiss}
-          className="text-blue-400 hover:text-blue-600 ml-4"
+          className="text-primary/60 hover:text-primary ml-4"
         >
           <XMarkIcon className="h-4 w-4" />
         </button>

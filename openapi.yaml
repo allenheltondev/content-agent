@@ -1,0 +1,515 @@
+openapi: 3.0.0
+info:
+  title: Blog API
+  version: 1.0.0
+  description: Multi-tenant blog post management API with AI-powered suggestions
+
+x-amazon-apigateway-authorizers:
+  LambdaAuthorizer:
+    type: request
+    authorizerUri:
+      Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BlogApiAuthorizer.Arn}/invocations
+    authorizerCredentials:
+      Fn::GetAtt: BlogApiAuthorizerInvokeRole.Arn
+    identitySource: method.request.header.Authorization
+    authorizerResultTtlInSeconds: 300
+
+x-amazon-apigateway-request-validators:
+  Validate All:
+    validateRequestParameters: true
+    validateRequestBody: true
+x-amazon-apigateway-gateway-responses:
+  BAD_REQUEST_BODY:
+    statusCode: 400
+    responseTemplates:
+      application/json: '{ "message": "$context.error.validationErrorString" }'
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin:
+        Fn::Sub: "'${Origin}'"
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+  DEFAULT_4XX:
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin:
+        Fn::Sub: "'${Origin}'"
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+  DEFAULT_5XX:
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin:
+        Fn::Sub: "'${Origin}'"
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+
+paths:
+  /posts:
+    get:
+      summary: List user's blog posts
+      description: Retrieve all blog posts belonging to the authenticated user's tenant
+      tags: [Posts]
+      security:
+        - LambdaAuthorizer: []
+      responses:
+        200:
+          description: List of blog posts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BlogPost"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ListPostsFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+    post:
+      summary: Create new blog post
+      description: Create a new blog post for the authenticated user
+      tags: [Posts]
+      security:
+        - LambdaAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostRequest"
+      responses:
+        201:
+          description: Blog post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+        400:
+          $ref: "#/components/responses/BadRequest"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreatePostFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+  /posts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The blog post ID (contentId)
+
+    get:
+      summary: Get specific blog post
+      description: Retrieve a specific blog post by ID, ensuring it belongs to the user's tenant
+      tags: [Posts]
+      security:
+        - LambdaAuthorizer: []
+      responses:
+        200:
+          description: Blog post details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        403:
+          $ref: "#/components/responses/Forbidden"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetPostFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+    put:
+      summary: Update blog post
+      description: Update an existing blog post, ensuring it belongs to the user's tenant
+      tags: [Posts]
+      security:
+        - LambdaAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePostRequest"
+      responses:
+        200:
+          description: Blog post updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlogPost"
+        400:
+          $ref: "#/components/responses/BadRequest"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        403:
+          $ref: "#/components/responses/Forbidden"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UpdatePostFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+    delete:
+      summary: Delete blog post
+      description: Delete a blog post, ensuring it belongs to the user's tenant
+      tags: [Posts]
+      security:
+        - LambdaAuthorizer: []
+      responses:
+        204:
+          description: Blog post deleted successfully
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        403:
+          $ref: "#/components/responses/Forbidden"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DeletePostFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+  /posts/{id}/suggestions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The blog post ID (contentId)
+
+    get:
+      summary: Get suggestions for a blog post
+      description: Retrieve all suggestions for a specific blog post, ensuring the post belongs to the user's tenant
+      tags: [Suggestions]
+      security:
+        - LambdaAuthorizer: []
+      responses:
+        200:
+          description: List of suggestions for the blog post
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Suggestion"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        403:
+          $ref: "#/components/responses/Forbidden"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetSuggestionsFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+  /suggestions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The suggestion ID
+
+    delete:
+      summary: Delete a suggestion
+      description: Delete a specific suggestion, ensuring it belongs to a post owned by the user's tenant
+      tags: [Suggestions]
+      security:
+        - LambdaAuthorizer: []
+      responses:
+        204:
+          description: Suggestion deleted successfully
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        403:
+          $ref: "#/components/responses/Forbidden"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DeleteSuggestionFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+components:
+  securitySchemes:
+    LambdaAuthorizer:
+      type: apiKey
+      name: Authorization
+      in: header
+      x-amazon-apigateway-authorizer:
+        $ref: "#/x-amazon-apigateway-authorizers/LambdaAuthorizer"
+
+  schemas:
+    BlogPost:
+      type: object
+      required:
+        - id
+        - title
+        - body
+        - status
+        - version
+        - createdAt
+        - updatedAt
+        - authorId
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the blog post (contentId)
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        title:
+          type: string
+          description: Title of the blog post
+          maxLength: 200
+          example: "My First Blog Post"
+        body:
+          type: string
+          description: Content body of the blog post
+          maxLength: 50000
+          example: "This is the content of my blog post..."
+        status:
+          type: string
+          enum: [draft, review, finalized, published, abandoned]
+          description: Current status of the blog post
+          example: "draft"
+        version:
+          type: integer
+          description: Version number of the blog post
+          minimum: 1
+          example: 1
+        createdAt:
+          type: integer
+          description: Unix timestamp when the post was created
+          example: 1640995200
+        updatedAt:
+          type: integer
+          description: Unix timestamp when the post was last updated
+          example: 1640995200
+        authorId:
+          type: string
+          description: Cognito user ID of the post author
+          example: "auth0|507f1f77bcf86cd799439011"
+
+    CreatePostRequest:
+      type: object
+      required:
+        - title
+        - body
+      properties:
+        title:
+          type: string
+          description: Title of the blog post
+          maxLength: 200
+          example: "My New Blog Post"
+        body:
+          type: string
+          description: Content body of the blog post
+          maxLength: 50000
+          example: "This is the content of my new blog post..."
+        status:
+          type: string
+          enum: [draft, review, finalized, published, abandoned]
+          description: Initial status of the blog post
+          default: "draft"
+          example: "draft"
+
+    UpdatePostRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Updated title of the blog post
+          maxLength: 200
+          example: "My Updated Blog Post"
+        body:
+          type: string
+          description: Updated content body of the blog post
+          maxLength: 50000
+          example: "This is the updated content..."
+        status:
+          type: string
+          enum: [draft, review, finalized, published, abandoned]
+          description: Updated status of the blog post
+          example: "review"
+
+    Suggestion:
+      type: object
+      required:
+        - id
+        - contentId
+        - startOffset
+        - endOffset
+        - textToReplace
+        - replaceWith
+        - reason
+        - priority
+        - type
+        - contextBefore
+        - contextAfter
+        - anchorText
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the suggestion
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        contentId:
+          type: string
+          description: ID of the blog post this suggestion belongs to
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        startOffset:
+          type: integer
+          description: Starting character position of the text to replace
+          minimum: 0
+          example: 45
+        endOffset:
+          type: integer
+          description: Ending character position of the text to replace
+          minimum: 0
+          example: 52
+        textToReplace:
+          type: string
+          description: Original text that should be replaced
+          example: "recieve"
+        replaceWith:
+          type: string
+          description: Suggested replacement text
+          example: "receive"
+        reason:
+          type: string
+          description: Explanation for why this change is suggested
+          example: "Spelling correction: 'recieve' should be 'receive'"
+        priority:
+          type: string
+          enum: [low, medium, high]
+          description: Priority level of the suggestion
+          example: "high"
+        type:
+          type: string
+          enum: [llm, brand, fact, grammar, spelling]
+          description: Type of suggestion based on the source or category
+          example: "spelling"
+        contextBefore:
+          type: string
+          description: Text context before the suggested change
+          example: "Please "
+        contextAfter:
+          type: string
+          description: Text context after the suggested change
+          example: " this email"
+        anchorText:
+          type: string
+          description: The full text segment including context
+          example: "Please recieve this email"
+        createdAt:
+          type: integer
+          description: Unix timestamp when the suggestion was created
+          example: 1640995200
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type identifier
+          example: "ValidationError"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "The request body contains invalid data"
+        details:
+          type: object
+          description: Additional error context (development only)
+          additionalProperties: true
+
+  responses:
+    BadRequest:
+      description: Invalid request data
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "ValidationError"
+            message: "The request body contains invalid data"
+
+    Unauthorized:
+      description: Authentication required or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Unauthorized"
+            message: "Valid JWT token required"
+
+    Forbidden:
+      description: Access denied - resource belongs to different tenant
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Forbidden"
+            message: "Access denied to this resource"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "NotFound"
+            message: "The requested resource was not found"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "InternalError"
+            message: "An unexpected error occurred"
+
+tags:
+  - name: Posts
+    description: Blog post management operations
+  - name: Suggestions
+    description: AI-generated suggestion operations

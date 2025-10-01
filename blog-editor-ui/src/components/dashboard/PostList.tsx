@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { BlogPost } from '../../types';
-import { apiService } from '../../services/ApiService';
+import { apiService } from '../../services';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useAsyncOperation } from '../../hooks/useErrorHandling';
 import { LoadingState, ButtonLoading } from '../common/LoadingState';
@@ -47,9 +47,11 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
       if (fetchedPosts) {
         setPosts(fetchedPosts);
       }
+      // If fetchedPosts is null, the error is already handled by useAsyncOperation
+      // and will be displayed via the loadError state
     };
     fetchPosts();
-  }, [loadPostsWithRetry]);
+  }, []); // Empty dependency array - only run on mount
 
   const handleCreatePost = async () => {
     const newPost = await createPost(() => apiService.createPost({
@@ -92,7 +94,7 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
       case 'finalized':
         return 'bg-green-100 text-green-800';
       case 'published':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-primary/20 text-primary';
       case 'abandoned':
         return 'bg-red-100 text-red-800';
       default:
@@ -158,7 +160,7 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
           <button
             onClick={handleCreatePost}
             disabled={isCreating}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isCreating ? (
               <ButtonLoading message="Creating..." />
@@ -187,7 +189,7 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
             <button
               onClick={handleCreatePost}
               disabled={isCreating}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isCreating ? (
                 <ButtonLoading message="Creating..." />
