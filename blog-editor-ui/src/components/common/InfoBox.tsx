@@ -48,7 +48,7 @@ export const InfoBox: React.FC<InfoBoxProps> = ({
   const styles = typeStyles[type];
   const containerClasses = `
     ${styles.container}
-    border rounded-lg p-4 mb-4 relative
+    border rounded-lg p-3 sm:p-4 mb-3 sm:mb-4 relative
     transition-all duration-300 ease-in-out
     ${isAnimating ? 'opacity-0 transform scale-95 -translate-y-2' : 'opacity-100 transform scale-100 translate-y-0'}
     ${className}
@@ -58,9 +58,9 @@ export const InfoBox: React.FC<InfoBoxProps> = ({
     <div className={containerClasses} role="alert" aria-live="polite">
       <div className="flex items-start">
         {/* Icon */}
-        <div className={`flex-shrink-0 ${styles.icon} mr-3 mt-0.5`}>
+        <div className={`flex-shrink-0 ${styles.icon} mr-2 sm:mr-3 mt-0.5`}>
           <svg
-            className="h-5 w-5"
+            className="h-4 w-4 sm:h-5 sm:w-5"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -77,10 +77,10 @@ export const InfoBox: React.FC<InfoBoxProps> = ({
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold mb-1">
+          <h3 className="text-sm sm:text-base font-semibold mb-1">
             {title}
           </h3>
-          <div className="text-sm">
+          <div className="text-xs sm:text-sm">
             {typeof content === 'string' ? (
               <p>{content}</p>
             ) : (
@@ -94,7 +94,7 @@ export const InfoBox: React.FC<InfoBoxProps> = ({
           <button
             onClick={handleDismiss}
             className={`
-              flex-shrink-0 ml-3 p-1 rounded-md
+              flex-shrink-0 ml-2 sm:ml-3 p-1 rounded-md
               ${styles.icon} hover:bg-black/5
               transition-colors duration-200
               focus:outline-none focus:ring-2 focus:ring-primary/50
@@ -103,7 +103,7 @@ export const InfoBox: React.FC<InfoBoxProps> = ({
             type="button"
           >
             <svg
-              className="h-4 w-4"
+              className="h-3 w-3 sm:h-4 sm:w-4"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

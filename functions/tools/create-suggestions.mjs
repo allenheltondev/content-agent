@@ -10,6 +10,7 @@ const CONTEXT_WINDOW = 30;
 const OFFSET_TOLERANCE = 50;
 
 export const createSuggestionsTool = {
+  isMultiTenant: true,
   name: 'createSuggestions',
   description: 'Creates one or more suggested edits to a piece of written content',
   schema: z.object({

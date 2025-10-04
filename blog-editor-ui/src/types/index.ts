@@ -66,6 +66,30 @@ export interface FinalizeRequest {
   postId: string;
 }
 
+// Profile API request/response types
+export interface CreateProfileRequest {
+  writingTone: string;
+  writingStyle: string;
+  topics: string[];
+  skillLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+}
+
+export interface UpdateProfileRequest {
+  writingTone?: string;
+  writingStyle?: string;
+  topics?: string[];
+  skillLevel?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+}
+
+export interface ProfileResponse {
+  profile: UserProfile;
+}
+
+export interface ProfileSetupResponse {
+  success: boolean;
+  profile: UserProfile;
+}
+
 // Amazon Cognito user types
 export interface CognitoUser {
   username: string;
@@ -74,6 +98,32 @@ export interface CognitoUser {
     sub: string;
     name?: string;
   };
+}
+
+// User profile types
+export interface UserProfile {
+  userId: string;
+  email: string;
+  name: string;
+  writingTone: string; // Freetext description of their tone (couple sentences)
+  writingStyle: string; // Freetext description of their style (couple sentences)
+  topics: string[];
+  skillLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  isComplete: boolean;
+  createdAt: number;
+  updatedAt: number;
+  version: number;
+}
+
+// Profile setup form state management
+export interface ProfileSetupData {
+  writingTone: string;
+  writingStyle: string;
+  topics: string[];
+  skillLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  currentStep: number;
+  isSubmitting: boolean;
+  validationErrors: Record<string, string>;
 }
 
 // Authentication flow types

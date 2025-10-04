@@ -5,6 +5,7 @@ import { apiService } from '../services/ApiService';
 import { useToast } from '../hooks/useToast';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useDraftPersistence } from '../hooks/useDraftPersistence';
+import { useNewPostDraft } from '../hooks/useNewPostDraft';
 import { useSuggestionManager } from '../hooks/useSuggestionManager';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { EditorHeader } from '../components/editor/EditorHeader';
@@ -15,9 +16,11 @@ import { SuggestionStats } from '../components/editor/SuggestionStats';
 import { UndoNotification } from '../components/editor/UndoNotification';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
-import { InfoBox } from '../components/common';
+import { InfoBox, AppHeader } from '../components/common';
 import { DraftRecoveryNotification } from '../components/editor/DraftRecoveryNotification';
+import { NewPostRecoveryNotification } from '../components/editor/NewPostRecoveryNotification';
 import { ConflictResolutionModal } from '../components/editor/ConflictResolutionModal';
+import { LocalStorageManager } from '../utils/localStorage';
 import { useInfoBoxManager } from '../hooks/useInfoBoxManager';
 import {
   detectConflict,
@@ -33,18 +36,23 @@ export const EditorPage = () => {
   const { showError, showSuccess } = useToast();
   const { isDismissed, dismissInfoBox } = useInfoBoxManager();
 
-  // Set page title
-  usePageTitle('Editor');
+  // Check if this is a new post
+  const isNewPost = id === 'new';
 
   const [post, setPost] = useState<BlogPost | null>(null);
   const [content, setContent] = useState('');
   const [title, setTitle] = useState('');
+
+  // Set page title based on post state
+  usePageTitle(isNewPost ? 'New Post' : (title.trim() || 'Editor'));
   const [isLoading, setIsLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
   const [showDraftRecovery, setShowDraftRecovery] = useState(false);
+  const [showNewPostRecovery, setShowNewPostRecovery] = useState(false);
   const [conflictData, setConflictData] = useState<ConflictData | null>(null);
   const [, setInitialLoadTimestamp] = useState<number>(0);
   const [showUndoNotification, setShowUndoNotification] = useState(false);
+  const [isCreatingPost, setIsCreatingPost] = useState(false);
 
   // Workflow confirmation modals
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
@@ -52,7 +60,10 @@ export const EditorPage = () => {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
 
-  // Auto-save hook
+  // Navigation confirmation modal
+  const [showNavigationConfirmation, setShowNavigationConfirmation] = useState(false);
+
+  // Auto-save hook - disabled for new posts until first save
   const {
     isSaving: isAutoSaving,
     lastSaved,
@@ -71,18 +82,31 @@ export const EditorPage = () => {
     onSaveError: (error) => {
       showError(`Auto-save failed: ${error}`);
     },
-    enabled: !!id && !!post
+    enabled: !!id && !!post && !isNewPost
   });
 
-  // Draft persistence hook
+  // Draft persistence hook - use "new" as postId for new posts
   const { loadDraft, clearDraft } = useDraftPersistence({
     postId: id || '',
     title,
     content,
-    enabled: !!id
+    enabled: !!id && !isNewPost
   });
 
-  // Suggestion management hook
+  // New post draft persistence hook
+  const {
+    loadDraft: loadNewPostDraft,
+    clearDraft: clearNewPostDraft,
+    showRecoveryPrompt: showNewPostRecoveryPrompt,
+    recoverDraft: recoverNewPostDraft,
+    dismissRecoveryPrompt: dismissNewPostRecoveryPrompt
+  } = useNewPostDraft({
+    title,
+    content,
+    enabled: isNewPost
+  });
+
+  // Suggestion management hook - disabled for new posts
   const {
     suggestions,
     isLoading: suggestionsLoading,
@@ -104,7 +128,7 @@ export const EditorPage = () => {
   });
 
   // Combined saving state
-  const isSaving = isAutoSaving;
+  const isSaving = isAutoSaving || isCreatingPost;
 
   // Load post data on mount
   useEffect(() => {
@@ -115,6 +139,39 @@ export const EditorPage = () => {
         return;
       }
 
+      // Handle new post creation
+      if (isNewPost) {
+        try {
+          setIsLoading(true);
+
+          // Initialize empty new post - recovery will be handled by the hook
+          setTitle('');
+          setContent('');
+
+          // Create a temporary post object for new posts
+          const tempPost: BlogPost = {
+            id: 'new',
+            title: '',
+            body: '',
+            status: 'draft',
+            version: 1,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            authorId: 'current-user' // This will be set by the backend
+          };
+          setPost(tempPost);
+          setInitialLoadTimestamp(Date.now());
+        } catch (error) {
+          console.error('Failed to initialize new post:', error);
+          showError('Failed to initialize new post');
+          navigate('/dashboard');
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      // Handle existing post loading
       try {
         setIsLoading(true);
         const loadedPost = await apiService.getPost(id);
@@ -171,11 +228,59 @@ export const EditorPage = () => {
     };
 
     loadPost();
-  }, [id, navigate, showError, loadDraft, loadSuggestions]);
+  }, [id, navigate, showError, loadDraft, loadSuggestions, isNewPost]);
 
   // Manual save (force save)
   const handleSave = useCallback(async () => {
-    if (!post || !isDirty) return;
+    if (!post) return;
+
+    // Handle new post creation
+    if (isNewPost) {
+      if (!title.trim()) {
+        showError('Title is required to save a new post');
+        return;
+      }
+
+      if (!content.trim()) {
+        showError('Content is required to save a new post');
+        return;
+      }
+
+      if (title.trim().length < 3) {
+        showError('Title must be at least 3 characters long');
+        return;
+      }
+
+      if (content.trim().length < 10) {
+        showError('Content must be at least 10 characters long');
+        return;
+      }
+
+      try {
+        setIsCreatingPost(true);
+        const newPost = await apiService.createPost({
+          title: title.trim(),
+          body: content.trim()
+        });
+
+        setPost(newPost);
+        setIsDirty(false);
+        clearNewPostDraft(); // Clear new post draft after successful creation
+        showSuccess('Post created successfully');
+
+        // Navigate to the new post's editor page
+        navigate(`/editor/${newPost.id}`, { replace: true });
+      } catch (error) {
+        console.error('Failed to create post:', error);
+        showError('Failed to create post');
+      } finally {
+        setIsCreatingPost(false);
+      }
+      return;
+    }
+
+    // Handle existing post save
+    if (!isDirty) return;
 
     try {
       await forceSave();
@@ -184,7 +289,7 @@ export const EditorPage = () => {
       console.error('Failed to save post:', error);
       showError('Failed to save post');
     }
-  }, [post, isDirty, forceSave, showSuccess, showError]);
+  }, [post, isDirty, isNewPost, title, content, forceSave, showSuccess, showError, navigate, clearDraft]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -208,6 +313,24 @@ export const EditorPage = () => {
       clearSaveError();
     }
   }, [saveError, isDirty, content, title, clearSaveError]);
+
+  // Warn user about unsaved changes when leaving the page
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const hasUnsavedContent = isDirty || (isNewPost && (title.trim() || content.trim()));
+      if (hasUnsavedContent) {
+        e.preventDefault();
+        const message = isNewPost
+          ? 'You have an unsaved new post. Are you sure you want to leave?'
+          : 'You have unsaved changes. Are you sure you want to leave?';
+        e.returnValue = message;
+        return message;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty, isNewPost, title, content]);
 
   // Handle content changes
   const handleContentChange = (newContent: string) => {
@@ -236,6 +359,20 @@ export const EditorPage = () => {
     setShowDraftRecovery(false);
     showSuccess('Draft discarded');
   }, [clearDraft, showSuccess]);
+
+  // Handle new post draft recovery
+  const handleRecoverNewPostDraft = useCallback((draftData: { title: string; content: string; timestamp: number }) => {
+    setTitle(draftData.title);
+    setContent(draftData.content);
+    setIsDirty(true);
+    showSuccess('Draft recovered successfully');
+  }, [showSuccess]);
+
+  // Handle new post draft discard
+  const handleDiscardNewPostDraft = useCallback(() => {
+    clearNewPostDraft();
+    showSuccess('Draft discarded');
+  }, [clearNewPostDraft, showSuccess]);
 
   // Handle conflict resolution
   const handleConflictResolution = useCallback((resolution: ConflictResolution) => {
@@ -288,6 +425,28 @@ export const EditorPage = () => {
     }
   }, [undoLastAcceptance, showSuccess, showError]);
 
+  // Handle back navigation with unsaved changes warning
+  const handleNavigateBack = useCallback(() => {
+    if (isDirty || (isNewPost && (title.trim() || content.trim()))) {
+      setShowNavigationConfirmation(true);
+    } else {
+      navigate('/dashboard');
+    }
+  }, [isDirty, isNewPost, title, content, navigate]);
+
+  // Confirm navigation away from unsaved changes
+  const handleNavigationConfirmed = useCallback(() => {
+    setShowNavigationConfirmation(false);
+    // Clear draft for new posts when user confirms navigation away
+    if (isNewPost) {
+      clearNewPostDraft();
+      LocalStorageManager.cleanupOldDrafts();
+    } else {
+      clearDraft();
+    }
+    navigate('/dashboard');
+  }, [navigate, isNewPost, clearNewPostDraft, clearDraft]);
+
   // Clear suggestions error when user dismisses
   useEffect(() => {
     if (suggestionsError) {
@@ -302,6 +461,10 @@ export const EditorPage = () => {
   const validateWorkflowAction = (): { isValid: boolean; error?: string } => {
     if (!post) {
       return { isValid: false, error: 'No post loaded' };
+    }
+
+    if (isNewPost) {
+      return { isValid: false, error: 'Please create and save your new post before submitting for review or finalizing' };
     }
 
     if (!title.trim()) {
@@ -451,6 +614,16 @@ export const EditorPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Professional App Header */}
+      <AppHeader
+        editorContext={{
+          isNewPost,
+          postTitle: title.trim() || undefined,
+          isDirty,
+          onNavigateBack: handleNavigateBack
+        }}
+      />
+
       <div className="max-w-7xl mx-auto">
         <EditorHeader
           title={title}
@@ -459,33 +632,47 @@ export const EditorPage = () => {
           isDirty={isDirty}
           lastSaved={lastSaved}
           onSave={handleSave}
+          isNewPost={isNewPost}
         />
 
         {/* Notifications */}
-        <div className="px-4 sm:px-6 lg:px-8">
+        <div className="px-3 sm:px-4 lg:px-6 xl:px-8">
           {/* Draft Recovery Notification */}
-          {showDraftRecovery && (
-            <div className="pt-4">
-              <DraftRecoveryNotification
-                draftData={loadDraft()!}
-                onRecover={handleRecoverDraft}
-                onDiscard={handleDiscardDraft}
-                onDismiss={() => setShowDraftRecovery(false)}
+          {showDraftRecovery && (() => {
+            const draftData = loadDraft();
+            return draftData ? (
+              <div className="pt-3 sm:pt-4">
+                <DraftRecoveryNotification
+                  draftData={draftData}
+                  onRecover={handleRecoverDraft}
+                  onDiscard={handleDiscardDraft}
+                  onDismiss={() => setShowDraftRecovery(false)}
+                />
+              </div>
+            ) : null;
+          })()}
+
+          {/* New Post Recovery Notification */}
+          {showNewPostRecoveryPrompt && (
+            <div className="pt-3 sm:pt-4">
+              <NewPostRecoveryNotification
+                onRecover={handleRecoverNewPostDraft}
+                onDismiss={dismissNewPostRecoveryPrompt}
               />
             </div>
           )}
 
           {/* Save Error Notification */}
           {saveError && (
-            <div className="pt-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <div className="flex items-center">
-                  <div className="text-sm text-red-700">
+            <div className="pt-3 sm:pt-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4">
+                <div className="flex items-start sm:items-center">
+                  <div className="text-sm text-red-700 flex-1 min-w-0">
                     <strong>Save Error:</strong> {saveError}
                   </div>
                   <button
                     onClick={clearSaveError}
-                    className="ml-auto text-red-400 hover:text-red-600"
+                    className="ml-2 sm:ml-auto text-red-400 hover:text-red-600 flex-shrink-0"
                   >
                     <span className="sr-only">Dismiss</span>
                     ×
@@ -497,15 +684,15 @@ export const EditorPage = () => {
 
           {/* Suggestions Error Notification */}
           {suggestionsError && (
-            <div className="pt-4">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-center">
-                  <div className="text-sm text-yellow-700">
+            <div className="pt-3 sm:pt-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4">
+                <div className="flex items-start sm:items-center">
+                  <div className="text-sm text-yellow-700 flex-1 min-w-0">
                     <strong>Suggestions Error:</strong> {suggestionsError}
                   </div>
                   <button
                     onClick={clearSuggestionsError}
-                    className="ml-auto text-yellow-400 hover:text-yellow-600"
+                    className="ml-2 sm:ml-auto text-yellow-400 hover:text-yellow-600 flex-shrink-0"
                   >
                     <span className="sr-only">Dismiss</span>
                     ×
@@ -516,7 +703,7 @@ export const EditorPage = () => {
           )}
         </div>
 
-        <div className="px-4 sm:px-6 lg:px-8 py-4">
+        <div className="px-3 sm:px-4 lg:px-6 xl:px-8 py-3 sm:py-4">
           {/* Editor guidance info box */}
           {!isDismissed('editor-guidance') && (
             <InfoBox
@@ -550,21 +737,21 @@ export const EditorPage = () => {
             />
           )}
 
-          <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+          <div className="flex flex-col xl:flex-row gap-3 sm:gap-4 xl:gap-6">
             {/* Main editor area */}
             <div className="flex-1 min-w-0">
               <div className="bg-white shadow-sm rounded-lg overflow-hidden">
                 <ContentEditor
                   content={content}
                   onChange={handleContentChange}
-                  placeholder="Start writing your blog post..."
+                  placeholder={isNewPost ? "Start writing your new blog post... Your content will be automatically saved as a draft while you write." : "Start writing your blog post..."}
                 />
               </div>
 
-              {/* Suggestion list below editor on mobile, hidden on desktop */}
+              {/* Suggestion list below editor on mobile and tablet, hidden on desktop */}
               {hasActiveSuggestions && (
-                <div className="mt-4 bg-white shadow-sm rounded-lg p-4 sm:p-6 lg:hidden">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                <div className="mt-3 sm:mt-4 bg-white shadow-sm rounded-lg p-4 sm:p-6 xl:hidden">
+                  <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">
                     AI Suggestions ({suggestions.length})
                   </h3>
                   <SuggestionList
@@ -577,9 +764,9 @@ export const EditorPage = () => {
               )}
             </div>
 
-            {/* Sidebar with suggestion stats - hidden on mobile, shown on desktop */}
+            {/* Sidebar with suggestion stats - hidden on mobile/tablet, shown on desktop */}
             {(hasActiveSuggestions || stats.accepted > 0 || stats.rejected > 0) && (
-              <div className="hidden lg:block w-80 xl:w-96 space-y-4 flex-shrink-0">
+              <div className="hidden xl:block w-80 2xl:w-96 space-y-4 flex-shrink-0">
                 <SuggestionStats
                   stats={stats}
                   onUndoClick={canUndo ? handleUndo : undefined}
@@ -669,6 +856,23 @@ export const EditorPage = () => {
         onConfirm={handleFinalizeConfirmed}
         onCancel={() => setShowFinalizeConfirmation(false)}
         isLoading={isFinalizing}
+      />
+
+      {/* Navigation Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showNavigationConfirmation}
+        title={isNewPost ? "Discard New Post?" : "Unsaved Changes"}
+        message={
+          isNewPost
+            ? "You have an unsaved new post that will be lost if you leave this page. Are you sure you want to discard it?"
+            : "You have unsaved changes that will be lost if you leave this page. Are you sure you want to continue?"
+        }
+        confirmText={isNewPost ? "Discard Post" : "Leave Page"}
+        cancelText="Stay Here"
+        type="warning"
+        icon="warning"
+        onConfirm={handleNavigationConfirmed}
+        onCancel={() => setShowNavigationConfirmation(false)}
       />
     </div>
   );

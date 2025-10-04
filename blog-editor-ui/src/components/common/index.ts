@@ -1,4 +1,5 @@
 export { AppRouter } from './AppRouter';
+export { AppHeader } from './AppHeader';
 export { LoadingSpinner } from './LoadingSpinner';
 export { ErrorBoundary } from './ErrorBoundary';
 export { AsyncErrorBoundary } from './AsyncErrorBoundary';

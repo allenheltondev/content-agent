@@ -15,4 +15,13 @@ const amplifyConfig = {
 // Configure Amplify
 Amplify.configure(amplifyConfig);
 
+// Log configuration for debugging (only in development)
+if (import.meta.env.DEV) {
+  console.log('Amplify configured with:', {
+    userPoolId: amplifyConfig.Auth.Cognito.userPoolId,
+    userPoolClientId: amplifyConfig.Auth.Cognito.userPoolClientId,
+    region: amplifyConfig.Auth.Cognito.region,
+  });
+}
+
 export default amplifyConfig;

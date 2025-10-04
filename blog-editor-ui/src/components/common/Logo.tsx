@@ -22,14 +22,15 @@ export const Logo: React.FC<LogoProps> = ({
   const textClasses = `${textSizeClasses[size]} font-bold text-tertiary ml-2`;
 
   return (
-    <div className="flex items-center">
+    <div className="flex items-center" role="img" aria-label="Betterer - AI-powered writing assistant">
       <img
         src="/logo.png"
-        alt="Betterer Logo"
+        alt=""
         className={logoClasses}
+        aria-hidden="true"
       />
       {showText && (
-        <span className={textClasses}>
+        <span className={textClasses} aria-hidden="true">
           Betterer
         </span>
       )}

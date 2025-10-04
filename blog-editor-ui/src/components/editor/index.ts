@@ -6,3 +6,5 @@ export { SuggestionHighlight } from './SuggestionHighlight';
 export { SuggestionPopover } from './SuggestionPopover';
 export { SuggestionInteractionDemo } from './SuggestionInteractionDemo';
 export { EditorActions } from './EditorActions';
+export { DraftRecoveryNotification } from './DraftRecoveryNotification';
+export { NewPostRecoveryNotification } from './NewPostRecoveryNotification';

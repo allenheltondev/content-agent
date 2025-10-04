@@ -9,6 +9,7 @@ interface EditorHeaderProps {
   isDirty: boolean;
   lastSaved: Date | null;
   onSave: () => void;
+  isNewPost?: boolean;
 }
 
 export const EditorHeader = ({
@@ -17,7 +18,8 @@ export const EditorHeader = ({
   isSaving,
   isDirty,
   lastSaved,
-  onSave
+  onSave,
+  isNewPost = false
 }: EditorHeaderProps) => {
   const navigate = useNavigate();
   const [titleValue, setTitleValue] = useState(title);
@@ -55,6 +57,24 @@ export const EditorHeader = ({
 
   // Save status indicator
   const SaveStatus = () => {
+    if (isNewPost) {
+      if (isSaving) {
+        return (
+          <div className="flex items-center text-sm text-primary">
+            <CloudArrowUpIcon className="h-4 w-4 mr-1 animate-pulse" />
+            Creating post...
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex items-center text-sm text-gray-500">
+          <div className="h-2 w-2 bg-orange-400 rounded-full mr-2" />
+          {titleValue.trim() ? 'Ready to create' : 'Enter title to create'}
+        </div>
+      );
+    }
+
     if (isSaving) {
       return (
         <div className="flex items-center text-sm text-primary">
@@ -100,7 +120,7 @@ export const EditorHeader = ({
               type="text"
               value={titleValue}
               onChange={handleTitleChange}
-              placeholder="Enter post title..."
+              placeholder={isNewPost ? "Enter title for your new post..." : "Enter post title..."}
               className="w-full text-lg sm:text-xl font-semibold text-gray-900 placeholder-gray-400 border-none outline-none focus:ring-0 p-0 bg-transparent"
               maxLength={200}
             />
@@ -112,20 +132,20 @@ export const EditorHeader = ({
           <div className="text-left sm:text-right order-2 sm:order-1">
             <SaveStatus />
             <div className="text-xs text-gray-500 mt-1">
-              {formatLastSaved(lastSaved)}
+              {isNewPost ? (titleValue.trim() ? 'Click Create Post to save' : 'Title required') : formatLastSaved(lastSaved)}
             </div>
           </div>
 
          {/* Manual save button */}
           <button
             onClick={onSave}
-            disabled={!isDirty || isSaving}
+            disabled={isNewPost ? (isSaving || !titleValue.trim()) : (!isDirty || isSaving)}
             className="order-1 sm:order-2 w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title="Save now (Ctrl+S)"
+            title={isNewPost ? "Create post (requires title)" : "Save now (Ctrl+S)"}
           >
             <CloudArrowUpIcon className="h-4 w-4 mr-1" />
-            <span className="hidden sm:inline">Save Now</span>
-            <span className="sm:hidden">Save</span>
+            <span className="hidden sm:inline">{isNewPost ? 'Create Post' : 'Save Now'}</span>
+            <span className="sm:hidden">{isNewPost ? 'Create' : 'Save'}</span>
           </button>
         </div>
       </div>

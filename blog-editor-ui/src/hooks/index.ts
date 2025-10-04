@@ -6,3 +6,5 @@ export { useDraftPersistence } from './useDraftPersistence';
 export { useErrorHandling, useAsyncOperation } from './useErrorHandling';
 export { usePageTitle } from './usePageTitle';
 export { useInfoBoxManager } from './useInfoBoxManager';
+export { useProfile } from './useProfile';
+export { useProfileSetup } from './useProfileSetup';

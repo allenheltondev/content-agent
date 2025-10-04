@@ -9,3 +9,4 @@ export {
   type ConflictData,
   type ConflictResolution
 } from './conflictResolution';
+export { extractFirstName } from './nameUtils';

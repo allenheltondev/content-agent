@@ -9,7 +9,7 @@ export const handler = async (event) => {
 
   try {
     // Extract tenantId from authorizer context
-    const { tenantId, userId } = event.requestContext.authorizer;
+    const { tenantId } = event.requestContext.authorizer;
 
     if (!tenantId) {
       console.error('Missing tenantId in authorizer context');
@@ -34,20 +34,18 @@ export const handler = async (event) => {
     const posts = response.Items?.map(item => {
       const unmarshalled = unmarshall(item);
       return {
-        id: unmarshalled.contentId,
+        id: unmarshalled.pk.split('#')[1],
         title: unmarshalled.title || '',
-        body: unmarshalled.body || '',
         status: unmarshalled.status || 'draft',
         version: unmarshalled.version || 1,
         createdAt: unmarshalled.createdAt,
         updatedAt: unmarshalled.updatedAt,
-        authorId: unmarshalled.authorId
       };
     }) || [];
 
     console.log(`Found ${posts.length} posts for tenant ${tenantId}`);
 
-    return formatResponse(200, posts);
+    return formatResponse(200, { posts });
 
   } catch (error) {
     console.error('List posts error:', error);

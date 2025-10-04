@@ -17,8 +17,12 @@ export default {
           hover: '#e69a29',
         },
         tertiary: {
-          DEFAULT: '#2B2D42',
+          DEFAULT: '#2B2D42', // Dark blue-gray for high contrast
         },
+        // Accessible gray colors with better contrast
+        'gray-600': '#4B5563', // Ensures AA compliance on white
+        'gray-700': '#374151', // Ensures AA compliance on white
+        'gray-800': '#1F2937', // Ensures AAA compliance on white
         // Suggestion type colors
         suggestion: {
           llm: {

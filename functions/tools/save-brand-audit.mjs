@@ -7,6 +7,7 @@ import { loadContent } from '../utils/content.mjs';
 const ddb = new DynamoDBClient();
 
 export const saveBrandAuditTool = {
+  isMultiTenant: true,
   name: 'saveBrandAudit',
   description: 'Saves the audit results for on-brand-ness for content',
   schema: z.object({

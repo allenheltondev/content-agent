@@ -13,7 +13,7 @@ const tools = convertToBedrockTools([saveBrandAuditTool, createSuggestionsTool])
 const AGENT_ID = 'brand-auditor';
 export const handler = async (event) => {
   try {
-    const { tenantId, sessionId, contentId } = event.detail;
+    const { tenantId, sessionId, contentId } = event;
     const actorId = `${AGENT_ID}/${tenantId}/${contentId}`;
     const content = await loadContent(tenantId, contentId);
     const providedBrandInformation = await buildProvidedInformationBlock(tenantId);
@@ -74,9 +74,10 @@ ${content.body}
       actorId
     });
 
-    return response;
+    return { message: response };
   } catch (err) {
     console.error(err);
+    throw err;
   }
 };
 
@@ -86,7 +87,7 @@ const buildProvidedInformationBlock = async (tenantId) => {
       TableName: process.env.TABLE_NAME,
       Key: marshall({
         pk: tenantId,
-        sk: 'brand'
+        sk: 'profile'
       })
     }));
     if (!response) {

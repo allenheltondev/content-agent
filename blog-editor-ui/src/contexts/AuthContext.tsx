@@ -25,18 +25,105 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Check if user is authenticated on mount
   useEffect(() => {
+    console.log('AuthProvider mounted, checking auth state...');
     checkAuthState();
   }, []);
+
+  // Set up periodic token refresh to prevent expiration
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Refresh tokens every 45 minutes (tokens expire after 1 hour)
+    const refreshInterval = setInterval(async () => {
+      try {
+        console.log('Refreshing tokens...');
+        await fetchAuthSession({ forceRefresh: true });
+        console.log('Tokens refreshed successfully');
+      } catch (error) {
+        console.error('Failed to refresh tokens:', error);
+        // If refresh fails, check auth state to handle logout
+        await checkAuthState();
+      }
+    }, 45 * 60 * 1000); // 45 minutes
+
+    return () => clearInterval(refreshInterval);
+  }, [isAuthenticated]);
+
+  // Refresh tokens when user returns to the tab/window
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleVisibilityChange = async () => {
+      if (!document.hidden) {
+        try {
+          console.log('Tab became visible, checking token validity...');
+          await fetchAuthSession({ forceRefresh: true });
+        } catch (error) {
+          console.error('Failed to refresh tokens on visibility change:', error);
+          await checkAuthState();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isAuthenticated]);
 
   const checkAuthState = async () => {
     try {
       setIsLoading(true);
+      console.log('Checking auth state...');
 
-      // Check both user and session to ensure user is fully authenticated
-      const [currentUser, session] = await Promise.all([
-        getCurrentUser(),
-        fetchAuthSession()
-      ]);
+      // First try to get session to check if we have valid tokens
+      console.log('Fetching auth session...');
+      const session = await fetchAuthSession({ forceRefresh: false });
+      console.log('Session fetched:', {
+        hasAccessToken: !!session.tokens?.accessToken,
+        hasIdToken: !!session.tokens?.idToken,
+        hasRefreshToken: !!session.tokens?.refreshToken
+      });
+
+      // Check if we have valid tokens
+      if (!session.tokens?.accessToken || !session.tokens?.idToken) {
+        throw new Error('No valid tokens found in session');
+      }
+
+      // Check if tokens are expired
+      const now = Math.floor(Date.now() / 1000);
+      const tokenExpiry = session.tokens.idToken?.payload?.exp;
+
+      console.log('Token expiry check:', {
+        tokenExpiry,
+        currentTime: now,
+        isExpired: tokenExpiry ? tokenExpiry < now : 'unknown'
+      });
+
+      if (tokenExpiry && tokenExpiry < now) {
+        console.log('Tokens expired, attempting refresh...');
+        // Try to refresh tokens
+        const refreshedSession = await fetchAuthSession({ forceRefresh: true });
+
+        if (!refreshedSession.tokens?.accessToken || !refreshedSession.tokens?.idToken) {
+          throw new Error('Failed to refresh expired tokens');
+        }
+        console.log('Tokens refreshed successfully');
+      }
+
+      // Now try to get current user
+      console.log('Getting current user...');
+      const currentUser = await getCurrentUser();
+      console.log('Current user retrieved:', {
+        username: currentUser?.username,
+        userId: currentUser?.userId
+      });
+
+      console.log('Auth check successful:', {
+        hasUser: !!currentUser,
+        hasAccessToken: !!session.tokens.accessToken,
+        hasIdToken: !!session.tokens.idToken,
+        tokenExpiry: session.tokens.idToken?.payload?.exp,
+        currentTime: now
+      });
 
       if (currentUser && session.tokens) {
         const cognitoUser: CognitoUser = {
@@ -51,7 +138,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(cognitoUser);
         setIsAuthenticated(true);
         setAuthFlowState('authenticated');
+        console.log('User authenticated successfully');
       } else {
+        console.log('Missing user or tokens, setting unauthenticated state');
         setUser(null);
         setIsAuthenticated(false);
         // Only reset to idle if not in a registration flow
@@ -60,7 +149,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
       }
     } catch (error) {
-      console.log('No authenticated user found:', error);
+      console.log('Auth state check failed:', error);
 
       // Use enhanced error handling for logging purposes
       const authError = AuthErrorHandler.processError(error, 'checkAuthState');
@@ -74,8 +163,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     } finally {
       setIsLoading(false);
+      console.log('Auth state check completed');
     }
   };
+
+
 
   const login = async (email: string, password: string): Promise<void> => {
     try {
@@ -273,6 +365,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setAuthFlowState('idle');
       setPendingEmailState(null);
 
+
+
       // Clear any local storage items
       localStorage.removeItem('auth_token');
       Object.keys(localStorage).forEach(key => {
@@ -352,8 +446,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const getToken = async (): Promise<string> => {
     try {
-      const session = await fetchAuthSession();
-      const token = session.tokens?.idToken?.toString();
+      // Force refresh to get fresh tokens if current ones are expired
+      const session = await fetchAuthSession({ forceRefresh: true });
+      const token = session.tokens?.accessToken?.toString();
 
       if (!token) {
         throw new Error('No authentication token available');
@@ -367,10 +462,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const authError = AuthErrorHandler.processError(error, 'getToken');
       console.error('Processed token error:', authError);
 
+      // If token refresh fails, user needs to log in again
+      if (error instanceof Error && error.message.includes('refresh')) {
+        setUser(null);
+        setIsAuthenticated(false);
+        setAuthFlowState('idle');
+      }
+
       // Throw user-friendly error message
       throw new Error(AuthErrorHandler.formatErrorMessage(authError, 'Failed to get authentication token'));
     }
   };
+
+
 
   const value: AuthContextType = {
     user,

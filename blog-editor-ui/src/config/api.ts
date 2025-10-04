@@ -7,7 +7,10 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 // Function to get auth token from Amplify
 const getAuthToken = async (): Promise<string> => {
   try {
-    const session = await fetchAuthSession();
+    // Force refresh to ensure we have valid tokens
+    const session = await fetchAuthSession({ forceRefresh: true });
+
+    // Use access token for API Gateway authorization (authorizer expects this)
     const token = session.tokens?.accessToken?.toString();
     if (!token) {
       throw new Error('No authentication token available');

@@ -7,7 +7,7 @@ const tools = convertToBedrockTools([saveLlmAuditTool, createSuggestionsTool]);
 const AGENT_ID = 'llm-auditor';
 export const handler = async (event) => {
   try {
-    const { tenantId, sessionId, contentId } = event.detail;
+    const { tenantId, sessionId, contentId } = event;
     const actorId = `${AGENT_ID}/${tenantId}/${contentId}`;
     const content = await loadContent(tenantId, contentId);
 
@@ -62,19 +62,20 @@ Proceed:
 4) If action is needed, return a concise message indicating how many suggestions you made but do not include information about them.
 `;
 
-const userPrompt = `
+    const userPrompt = `
 contentId: ${contentId}
 content:
 ${content.body}
-`
-    const response = await converse('openai.gpt-oss-20b-1:0', systemPrompt, userPrompt, tools, {
+`;
+    const response = await converse('amazon.nova-pro-v1:0', systemPrompt, userPrompt, tools, {
       tenantId,
       sessionId,
       actorId
     });
 
-    return response;
+    return { message: response };
   } catch (err) {
     console.error(err);
+    throw err;
   }
 };

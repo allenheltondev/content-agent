@@ -263,6 +263,102 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /profile:
+    get:
+      summary: Get user profile
+      description: Retrieve the authenticated user's writing profile and preferences
+      tags: [Profile]
+      security:
+        - LambdaAuthorizer: []
+      responses:
+        200:
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile:
+                    $ref: "#/components/schemas/UserProfile"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetProfileFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+    post:
+      summary: Create user profile
+      description: Create a new writing profile for the authenticated user during initial setup
+      tags: [Profile]
+      security:
+        - LambdaAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProfileRequest"
+      responses:
+        201:
+          description: User profile created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile:
+                    $ref: "#/components/schemas/UserProfile"
+        400:
+          $ref: "#/components/responses/BadRequest"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        409:
+          $ref: "#/components/responses/Conflict"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateProfileFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+      x-amazon-apigateway-request-validator: Validate All
+
+    put:
+      summary: Update user profile
+      description: Update the authenticated user's writing profile and preferences
+      tags: [Profile]
+      security:
+        - LambdaAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        204:
+          description: User profile updated successfully
+        400:
+          $ref: "#/components/responses/BadRequest"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UpdateProfileFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+      x-amazon-apigateway-request-validator: Validate All
+
 components:
   securitySchemes:
     LambdaAuthorizer:
@@ -438,6 +534,138 @@ components:
           description: Unix timestamp when the suggestion was created
           example: 1640995200
 
+    UserProfile:
+      type: object
+      required:
+        - userId
+        - email
+        - name
+        - writingTone
+        - writingStyle
+        - topics
+        - skillLevel
+        - isComplete
+        - createdAt
+        - updatedAt
+        - version
+      properties:
+        userId:
+          type: string
+          description: Cognito user ID
+          example: "auth0|507f1f77bcf86cd799439011"
+        email:
+          type: string
+          format: email
+          description: User email address from Cognito
+          example: "user@example.com"
+        name:
+          type: string
+          description: User display name from Cognito
+          example: "John Doe"
+        writingTone:
+          type: string
+          description: User's preferred writing tone in their own words
+          example: "I prefer a conversational and friendly tone that feels approachable and engaging"
+        writingStyle:
+          type: string
+          description: User's preferred writing style in their own words
+          example: "I write in a clear, structured style with short paragraphs and bullet points"
+        topics:
+          type: array
+          items:
+            type: string
+          description: Array of topics the user writes about
+          example: ["technology", "productivity", "remote work", "custom: AI ethics"]
+        skillLevel:
+          type: string
+          enum: [beginner, intermediate, advanced, expert]
+          description: User's self-assessed writing skill level
+          example: "intermediate"
+        isComplete:
+          type: boolean
+          description: Whether the profile setup is complete
+          example: true
+        createdAt:
+          type: integer
+          description: Unix timestamp when the profile was created
+          example: 1640995200
+        updatedAt:
+          type: integer
+          description: Unix timestamp when the profile was last updated
+          example: 1640995200
+        version:
+          type: integer
+          description: Version number of the profile, incremented on updates
+          minimum: 1
+          example: 1
+
+    CreateProfileRequest:
+      type: object
+      required:
+        - writingTone
+        - writingStyle
+        - topics
+        - skillLevel
+      properties:
+        writingTone:
+          type: string
+          description: User's preferred writing tone in their own words
+          minLength: 1
+          maxLength: 1000
+          example: "I prefer a conversational and friendly tone that feels approachable and engaging"
+        writingStyle:
+          type: string
+          description: User's preferred writing style in their own words
+          minLength: 1
+          maxLength: 1000
+          example: "I write in a clear, structured style with short paragraphs and bullet points"
+        topics:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          minItems: 1
+          maxItems: 20
+          description: Array of topics the user writes about
+          example: ["technology", "productivity", "remote work", "custom: AI ethics"]
+        skillLevel:
+          type: string
+          enum: [beginner, intermediate, advanced, expert]
+          description: User's self-assessed writing skill level
+          example: "intermediate"
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        writingTone:
+          type: string
+          description: Updated writing tone preference
+          minLength: 1
+          maxLength: 1000
+          example: "I prefer a more formal and professional tone for business content"
+        writingStyle:
+          type: string
+          description: Updated writing style preference
+          minLength: 1
+          maxLength: 1000
+          example: "I write in a detailed, analytical style with comprehensive explanations"
+        topics:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          minItems: 1
+          maxItems: 20
+          description: Updated array of topics the user writes about
+          example: ["business", "leadership", "strategy"]
+        skillLevel:
+          type: string
+          enum: [beginner, intermediate, advanced, expert]
+          description: Updated writing skill level
+          example: "advanced"
+
     ErrorResponse:
       type: object
       required:
@@ -498,6 +726,16 @@ components:
             error: "NotFound"
             message: "The requested resource was not found"
 
+    Conflict:
+      description: Resource already exists or conflict with current state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "Conflict"
+            message: "Profile already exists for this user"
+
     InternalError:
       description: Internal server error
       content:
@@ -513,3 +751,5 @@ tags:
     description: Blog post management operations
   - name: Suggestions
     description: AI-generated suggestion operations
+  - name: Profile
+    description: User profile and writing preferences management

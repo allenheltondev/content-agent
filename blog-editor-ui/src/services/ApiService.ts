@@ -8,7 +8,11 @@ import type {
   SubmitReviewRequest,
   FinalizeRequest,
   ApiError,
-  ApiServiceConfig
+  ApiServiceConfig,
+  UserProfile,
+  CreateProfileRequest,
+  UpdateProfileRequest,
+  ProfileResponse
 } from '../types';
 
 /**
@@ -247,7 +251,13 @@ export class ApiService {
    * Get all blog posts for the authenticated user
    */
   async getPosts(signal?: AbortSignal): Promise<BlogPost[]> {
-    const response = await this.get<PostListResponse>('/api/posts', signal);
+    const response = await this.get<PostListResponse | BlogPost[]>('/api/posts', signal);
+
+    // Handle both response formats: { posts: BlogPost[] } or BlogPost[]
+    if (Array.isArray(response)) {
+      return response;
+    }
+
     return response.posts || [];
   }
 
@@ -265,9 +275,6 @@ export class ApiService {
    * Create a new blog post
    */
   async createPost(post: CreatePostRequest, signal?: AbortSignal): Promise<BlogPost> {
-    if (!post.title || !post.body) {
-      throw new Error('Title and body are required');
-    }
     return this.post<BlogPost>('/api/posts', post, signal);
   }
 
@@ -322,6 +329,52 @@ export class ApiService {
     }
     const request: FinalizeRequest = { postId };
     await this.post<void>(`/api/posts/${encodeURIComponent(postId)}/finalize`, request, signal);
+  }
+
+  // Profile API methods
+
+  /**
+   * Create a new user profile during initial setup
+   */
+  async createProfile(profileData: CreateProfileRequest, signal?: AbortSignal): Promise<UserProfile> {
+    if (!profileData.writingTone || !profileData.writingStyle) {
+      throw new Error('Writing tone and style are required');
+    }
+    if (!profileData.topics || profileData.topics.length === 0) {
+      throw new Error('At least one topic is required');
+    }
+    if (!profileData.skillLevel) {
+      throw new Error('Skill level is required');
+    }
+
+    const response = await this.post<ProfileResponse>('/api/profile', profileData, signal);
+    return response.profile;
+  }
+
+  /**
+   * Update an existing user profile
+   */
+  async updateProfile(profileData: UpdateProfileRequest, signal?: AbortSignal): Promise<UserProfile> {
+    // Validate that at least one field is being updated
+    const hasUpdates = Object.values(profileData).some(value =>
+      value !== undefined && value !== null &&
+      (Array.isArray(value) ? value.length > 0 : true)
+    );
+
+    if (!hasUpdates) {
+      throw new Error('At least one profile field must be updated');
+    }
+
+    const response = await this.put<ProfileResponse>('/api/profile', profileData, signal);
+    return response.profile;
+  }
+
+  /**
+   * Get the current user's profile
+   */
+  async getProfile(signal?: AbortSignal): Promise<UserProfile> {
+    const response = await this.get<ProfileResponse>('/api/profile', signal);
+    return response.profile;
   }
 }
 

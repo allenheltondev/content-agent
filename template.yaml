@@ -7,6 +7,10 @@ Parameters:
   Origin:
     Type: String
     Default: "http://localhost:5173"
+  SerpApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
 
 Metadata:
   esbuild-properties: &esbuild-properties
@@ -278,20 +282,11 @@ Resources:
             - Effect: Allow
               Action: bedrock:InvokeModel
               Resource:
-                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/openai.gpt-oss-20b-1:0
+                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-pro-v1:0
       Environment:
         Variables:
           MEMORY_PARAMETER: !Ref AgentMemoryParameter
           TABLE_NAME: !Ref ContentTable
-      Events:
-        Scatter:
-          Type: EventBridgeRule
-          Properties:
-            Pattern:
-              source:
-                - content-agent
-              detail-type:
-                - Start Content Analysis
 
   BrandAuditAgent:
     Type: AWS::Serverless::Function
@@ -332,15 +327,45 @@ Resources:
         Variables:
           MEMORY_PARAMETER: !Ref AgentMemoryParameter
           TABLE_NAME: !Ref ContentTable
-      Events:
-        Scatter:
-          Type: EventBridgeRule
-          Properties:
-            Pattern:
-              source:
-                - content-agent
-              detail-type:
-                - Start Content Analysis
+
+  FactCheckAgent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - agents/fact-checker.mjs
+    Properties:
+      Handler: agents/fact-checker.handler
+      Timeout: 60
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/agents/memory"
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:CreateEvent
+                - bedrock-agentcore:ListEvents
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: !GetAtt ContentTable.Arn
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-pro-v1:0
+      Environment:
+        Variables:
+          MEMORY_PARAMETER: !Ref AgentMemoryParameter
+          TABLE_NAME: !Ref ContentTable
+          SERPAPI_KEY: !Ref SerpApiKey
 
   # Blog API Lambda Functions
   ListPostsFunction:
@@ -559,6 +584,93 @@ Resources:
             Path: /suggestions/{id}
             Method: DELETE
 
+  GetProfileFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/get-profile.mjs
+    Properties:
+      Handler: api/get-profile.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /profile
+            Method: GET
+
+  CreateProfileFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/create-profile.mjs
+    Properties:
+      Handler: api/create-profile.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /profile
+            Method: POST
+
+  UpdateProfileFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/update-profile.mjs
+    Properties:
+      Handler: api/update-profile.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /profile
+            Method: PUT
+
   BlogApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -603,6 +715,44 @@ Resources:
               - Effect: Allow
                 Action: lambda:InvokeFunction
                 Resource: !GetAtt BlogApiAuthorizer.Arn
+
+  ScheduleSocialStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Type: STANDARD
+      DefinitionUri: workflows/analyze-content.asl.json
+      DefinitionSubstitutions:
+        TableName: !Ref ContentTable
+        FactCheckAgent: !GetAtt FactCheckAgent.Arn
+        BrandAuditAgent: !GetAtt BrandAuditAgent.Arn
+        LLMAuditAgent: !GetAtt LLMAuditAgent.Arn
+      Policies:
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource:
+                - !GetAtt FactCheckAgent.Arn
+                - !GetAtt BrandAuditAgent.Arn
+                - !GetAtt LLMAuditAgent.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ContentTable.Arn
+            - Effect: Allow
+              Action: events:PutEvents
+              Resource: !Sub arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:event-bus/default
+      Events:
+        Analyze:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - content-agent
+              detail-type:
+                - Start Content Analysis
+
 Outputs:
   UserPoolId:
     Description: Cognito User Pool ID

@@ -59,7 +59,7 @@ export const converse = async (model, systemPrompt, userPrompt, tools, options) 
             }
 
             // Never allow an LLM to provide a tenant id!! Instead infer it from the code for security purposes
-            if (options?.tenantId) {
+            if (options?.tenantId && tool.isMultiTenant) {
               toolResult = await tool.handler(options.tenantId, toolInput);
             } else {
               toolResult = await tool.handler(toolInput);
@@ -125,9 +125,9 @@ const loadConversation = async (sessionId, actorId) => {
   const conversation = eventsResponse.events.flatMap(e => {
     return e.payload.flatMap(msg => {
       if (msg.conversational.role === 'ASSISTANT') {
-        return { role: 'assistant', content: msg.conversational.content };
+        return { role: 'assistant', content: [msg.conversational.content] };
       } else if (msg.conversational.role === 'USER') {
-        return { role: 'user', content: msg.conversational.content };
+        return { role: 'user', content: [msg.conversational.content] };
       } else if (msg.conversational.role === 'TOOL') {
         return { role: 'user', content: [{ toolResult: JSON.parse(msg.conversational.content.text) }] };
       }

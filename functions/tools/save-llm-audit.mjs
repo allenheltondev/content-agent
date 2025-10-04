@@ -7,6 +7,7 @@ import { loadContent } from '../utils/content.mjs';
 const ddb = new DynamoDBClient();
 
 export const saveLlmAuditTool = {
+  isMultiTenant: true,
   name: 'saveLlmAudit',
   description: 'Saves the audit results for LLM-likeness for content',
   schema: z.object({
