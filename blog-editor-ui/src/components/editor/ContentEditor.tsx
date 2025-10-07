@@ -1,4 +1,8 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useCallback, memo } from 'react';
+import { AsyncErrorBoundary } from '../common/AsyncErrorBoundary';
+import { EditorFallbackUI } from './EditorFallbackUI';
+import { ErrorReportingManager } from '../../utils/errorReporting';
+
 
 interface ContentEditorProps {
   content: string;
@@ -7,7 +11,7 @@ interface ContentEditorProps {
   disabled?: boolean;
 }
 
-export const ContentEditor = ({
+export const ContentEditor = memo(({
   content,
   onChange,
   placeholder = "Start writing your blog post...",
@@ -26,13 +30,13 @@ export const ContentEditor = ({
     }
   }, [content]);
 
-  // Handle content changes
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  // Handle content changes - memoized to prevent re-renders
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
-  };
+  }, [onChange]);
 
-  // Handle keyboard shortcuts
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  // Handle keyboard shortcuts - memoized to prevent re-renders
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Cmd/Ctrl + S for save (handled by parent component)
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
@@ -55,10 +59,30 @@ export const ContentEditor = ({
         textarea.selectionStart = textarea.selectionEnd = start + 1;
       }, 0);
     }
-  };
+  }, [content, onChange]);
 
   return (
-    <div className="relative">
+    <AsyncErrorBoundary
+      onError={(error, errorInfo) => {
+        ErrorReportingManager.reportEditorError(
+          error,
+          null,
+          'ContentEditor',
+          Boolean(content.trim()),
+          { errorInfo, contentLength: content.length }
+        );
+      }}
+      fallback={(error, retry) => (
+        <EditorFallbackUI
+          error={error}
+          onRetry={retry}
+          componentName="Content Editor"
+          title=""
+          content={content}
+        />
+      )}
+    >
+      <div className="relative">
       <textarea
         ref={textareaRef}
         value={content}
@@ -91,6 +115,9 @@ export const ContentEditor = ({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </AsyncErrorBoundary>
   );
-};
+});
+
+ContentEditor.displayName = 'ContentEditor';

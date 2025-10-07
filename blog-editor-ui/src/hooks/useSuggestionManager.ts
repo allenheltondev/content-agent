@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Suggestion } from '../types';
 import { suggestionService } from '../services/SuggestionService';
 import { apiService } from '../services/ApiService';
@@ -19,12 +19,23 @@ export interface SuggestionUndoAction {
  * Suggestion manager state
  */
 export interface SuggestionManagerState {
-  suggestions: Suggestion[];
+  allSuggestions: Suggestion[]; // Store all suggestions from API
   acceptedSuggestions: string[];
   rejectedSuggestions: string[];
   undoHistory: SuggestionUndoAction[];
+  summary?: string; // Content summary from API
   isLoading: boolean;
   error: string | null;
+  currentPostId: string | null; // Track which post we're loading
+}
+
+/**
+ * Request manager for tracking current request state
+ */
+interface RequestManager {
+  currentController: AbortController | null;
+  currentPostId: string | null;
+  isRequestInProgress: boolean;
 }
 
 /**
@@ -46,30 +57,23 @@ export function useSuggestionManager(
   config: SuggestionManagerConfig
 ) {
   const [state, setState] = useState<SuggestionManagerState>({
-    suggestions: [],
+    allSuggestions: [], // Store all suggestions from API
     acceptedSuggestions: [],
     rejectedSuggestions: [],
     undoHistory: [],
+    summary: undefined, // Content summary from API
     isLoading: false,
-    error: null
+    error: null,
+    currentPostId: null // Track which post we're loading
   });
 
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Request manager ref to track current request state without causing re-renders
+  const requestManagerRef = useRef<RequestManager>({
+    currentController: null,
+    currentPostId: null,
+    isRequestInProgress: false
+  });
   const persistenceKey = `suggestion_state_${config.postId}`;
-
-  // Load persisted state on mount
-  useEffect(() => {
-    if (config.persistState) {
-      loadPersistedState();
-    }
-  }, [config.postId, config.persistState]);
-
-  // Persist state changes
-  useEffect(() => {
-    if (config.persistState && config.postId) {
-      persistState();
-    }
-  }, [state.acceptedSuggestions, state.rejectedSuggestions, state.undoHistory, config.persistState, config.postId]);
 
   /**
    * Load persisted suggestion state from localStorage
@@ -108,40 +112,79 @@ export function useSuggestionManager(
     }
   }, [persistenceKey, state.acceptedSuggestions, state.rejectedSuggestions, state.undoHistory]);
 
+  // Load persisted state on mount and update currentPostId
+  useEffect(() => {
+    if (config.persistState) {
+      loadPersistedState();
+    }
+
+    // Update currentPostId and clear summary when config.postId changes
+    setState(prev => ({
+      ...prev,
+      currentPostId: config.postId,
+      summary: undefined // Clear summary when switching posts
+    }));
+  }, [config.postId, config.persistState, loadPersistedState]);
+
+  // Persist state changes
+  useEffect(() => {
+    if (config.persistState && config.postId) {
+      persistState();
+    }
+  }, [state.acceptedSuggestions, state.rejectedSuggestions, state.undoHistory, config.persistState, config.postId, persistState]);
+
   /**
    * Load suggestions from API
    */
   const loadSuggestions = useCallback(async () => {
     if (!config.postId) return;
 
-    // Cancel any existing request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+    // Don't start new request if same post is already loading
+    if (requestManagerRef.current.isRequestInProgress &&
+        requestManagerRef.current.currentPostId === config.postId) {
+      return;
     }
 
-    abortControllerRef.current = new AbortController();
+    // Only abort if loading different post
+    if (requestManagerRef.current.currentController &&
+        requestManagerRef.current.currentPostId !== config.postId) {
+      requestManagerRef.current.currentController.abort();
+      // Clear the reference to prevent memory leaks
+      requestManagerRef.current.currentController = null;
+    }
+
+    // Create new controller and update request manager
+    const controller = new AbortController();
+    requestManagerRef.current = {
+      currentController: controller,
+      currentPostId: config.postId,
+      isRequestInProgress: true
+    };
 
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const suggestions = await apiService.getSuggestions(
+      const response = await apiService.getSuggestions(
         config.postId,
-        abortControllerRef.current.signal
+        controller.signal
       );
 
-      // Filter out already accepted or rejected suggestions
-      const filteredSuggestions = suggestions.filter(
-        suggestion =>
-          !state.acceptedSuggestions.includes(suggestion.id) &&
-          !state.rejectedSuggestions.includes(suggestion.id)
-      );
-
+      // Store all suggestions and summary from API response
       setState(prev => ({
         ...prev,
-        suggestions: filteredSuggestions,
+        allSuggestions: response.suggestions,
+        summary: response.summary,
         isLoading: false
       }));
+
+      // Mark request as complete and clean up controller reference
+      requestManagerRef.current.isRequestInProgress = false;
+      requestManagerRef.current.currentController = null;
     } catch (error: any) {
+      // Mark request as complete and clean up controller reference
+      requestManagerRef.current.isRequestInProgress = false;
+      requestManagerRef.current.currentController = null;
+
       if (error.name !== 'AbortError') {
         console.error('Failed to load suggestions:', error);
         setState(prev => ({
@@ -149,15 +192,18 @@ export function useSuggestionManager(
           error: error.message || 'Failed to load suggestions',
           isLoading: false
         }));
+      } else {
+        // Silent handling of abort errors
+        setState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [config.postId, state.acceptedSuggestions, state.rejectedSuggestions]);
+  }, [config.postId]); // Only depend on postId
 
   /**
    * Accept a suggestion and apply it to content
    */
   const acceptSuggestion = useCallback(async (suggestionId: string) => {
-    const suggestion = state.suggestions.find(s => s.id === suggestionId);
+    const suggestion = state.allSuggestions.find(s => s.id === suggestionId);
     if (!suggestion) {
       console.warn('Suggestion not found:', suggestionId);
       return;
@@ -169,7 +215,7 @@ export function useSuggestionManager(
 
       // Create undo action
       const undoAction: SuggestionUndoAction = {
-        id: `undo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `undo_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
         suggestionId,
         originalContent: content,
         newContent,
@@ -183,7 +229,6 @@ export function useSuggestionManager(
 
         return {
           ...prev,
-          suggestions: prev.suggestions.filter(s => s.id !== suggestionId),
           acceptedSuggestions: [...prev.acceptedSuggestions, suggestionId],
           undoHistory: newUndoHistory
         };
@@ -207,13 +252,13 @@ export function useSuggestionManager(
         error: error.message || 'Failed to accept suggestion'
       }));
     }
-  }, [state.suggestions, content, onContentChange, config.maxUndoHistory]);
+  }, [state.allSuggestions, content, onContentChange, config.maxUndoHistory]);
 
   /**
    * Reject a suggestion and remove it from UI
    */
   const rejectSuggestion = useCallback(async (suggestionId: string) => {
-    const suggestion = state.suggestions.find(s => s.id === suggestionId);
+    const suggestion = state.allSuggestions.find(s => s.id === suggestionId);
     if (!suggestion) {
       console.warn('Suggestion not found:', suggestionId);
       return;
@@ -223,7 +268,6 @@ export function useSuggestionManager(
       // Update state
       setState(prev => ({
         ...prev,
-        suggestions: prev.suggestions.filter(s => s.id !== suggestionId),
         rejectedSuggestions: [...prev.rejectedSuggestions, suggestionId]
       }));
 
@@ -242,7 +286,7 @@ export function useSuggestionManager(
         error: error.message || 'Failed to reject suggestion'
       }));
     }
-  }, [state.suggestions]);
+  }, [state.allSuggestions]);
 
   /**
    * Undo the most recent suggestion acceptance
@@ -258,10 +302,9 @@ export function useSuggestionManager(
       // Restore original content
       onContentChange(lastUndo.originalContent);
 
-      // Restore suggestion to the list
+      // Remove from accepted suggestions (suggestion will appear in filtered view)
       setState(prev => ({
         ...prev,
-        suggestions: [lastUndo.suggestion, ...prev.suggestions],
         acceptedSuggestions: prev.acceptedSuggestions.filter(id => id !== lastUndo.suggestionId),
         undoHistory: prev.undoHistory.slice(1)
       }));
@@ -331,21 +374,20 @@ export function useSuggestionManager(
   }, [persistenceKey]);
 
   /**
-   * Get filtered suggestions (excluding accepted/rejected)
+   * Get filtered suggestions (excluding accepted/rejected) - memoized to prevent re-calculations
    */
-  const getActiveSuggestions = useCallback(() => {
-    return state.suggestions.filter(
+  const activeSuggestions = useMemo(() => {
+    return state.allSuggestions.filter(
       suggestion =>
         !state.acceptedSuggestions.includes(suggestion.id) &&
         !state.rejectedSuggestions.includes(suggestion.id)
     );
-  }, [state.suggestions, state.acceptedSuggestions, state.rejectedSuggestions]);
+  }, [state.allSuggestions, state.acceptedSuggestions, state.rejectedSuggestions]);
 
   /**
-   * Get suggestion statistics
+   * Get suggestion statistics - memoized to prevent re-calculations
    */
-  const getStats = useCallback(() => {
-    const activeSuggestions = getActiveSuggestions();
+  const stats = useMemo(() => {
     return {
       total: activeSuggestions.length,
       accepted: state.acceptedSuggestions.length,
@@ -359,20 +401,32 @@ export function useSuggestionManager(
         spelling: activeSuggestions.filter(s => s.type === 'spelling').length
       }
     };
-  }, [getActiveSuggestions, state.acceptedSuggestions, state.rejectedSuggestions, state.undoHistory]);
+  }, [activeSuggestions, state.acceptedSuggestions, state.rejectedSuggestions, state.undoHistory]);
 
-  // Cleanup on unmount
+  // Memoize hasActiveSuggestions to prevent re-calculations
+  const hasActiveSuggestions = useMemo(() => activeSuggestions.length > 0, [activeSuggestions.length]);
+
+  // Cleanup on unmount - ensure proper cleanup of AbortController and request manager
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      // Abort any pending requests
+      if (requestManagerRef.current.currentController) {
+        requestManagerRef.current.currentController.abort();
       }
+
+      // Clean up request manager to prevent memory leaks
+      requestManagerRef.current = {
+        currentController: null,
+        currentPostId: null,
+        isRequestInProgress: false
+      };
     };
   }, []);
 
   return {
     // State
-    suggestions: getActiveSuggestions(),
+    suggestions: activeSuggestions,
+    summary: state.summary,
     isLoading: state.isLoading,
     error: state.error,
     undoHistory: state.undoHistory,
@@ -388,8 +442,8 @@ export function useSuggestionManager(
     clearPersistedState,
 
     // Computed values
-    stats: getStats(),
+    stats,
     canUndo: state.undoHistory.length > 0,
-    hasActiveSuggestions: getActiveSuggestions().length > 0
+    hasActiveSuggestions
   };
 }

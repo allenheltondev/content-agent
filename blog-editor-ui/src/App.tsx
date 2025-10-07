@@ -6,9 +6,17 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useSkipLinks } from './hooks/useKeyboardNavigation';
 import './config/amplify'; // Initialize Amplify configuration
 import { initializeApi } from './config/api'; // Initialize API service
+import { initializeErrorBoundarySystem } from './utils/errorBoundarySetup';
+import { editorIntegrationManager } from './utils/editorIntegrationManager';
 
 // Initialize API service
 initializeApi();
+
+// Initialize error boundary system
+initializeErrorBoundarySystem();
+
+// Initialize editor integration manager
+editorIntegrationManager; // This initializes the singleton
 
 function App() {
   // Initialize skip links functionality

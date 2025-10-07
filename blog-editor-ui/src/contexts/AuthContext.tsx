@@ -2,6 +2,7 @@ import { createContext, useEffect, useState, type ReactNode } from 'react';
 import { getCurrentUser, signIn, signOut, fetchAuthSession, signUp, confirmSignUp, resendSignUpCode } from 'aws-amplify/auth';
 import type { AuthContextType, CognitoUser, AuthFlowState, AuthError } from '../types';
 import { AuthErrorHandler } from '../utils/authErrorHandler';
+import { componentCleanupManager } from '../utils/componentCleanupManager';
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -23,31 +24,241 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [lastResendTime, setLastResendTime] = useState<number | null>(null);
   const [resendCooldownUntil, setResendCooldownUntil] = useState<number | null>(null);
 
+  // Token refresh management
+  const [tokenRefreshInterval, setTokenRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [lastTokenRefresh, setLastTokenRefresh] = useState<number | null>(null);
+
+  // Authentication persistence functions
+  const persistAuthState = (authUser: CognitoUser, tokens: any) => {
+    try {
+      const authState = {
+        user: authUser,
+        isAuthenticated: true,
+        tokens: {
+          accessToken: tokens.accessToken?.toString(),
+          idToken: tokens.idToken?.toString(),
+          refreshToken: tokens.refreshToken?.toString(),
+          expiresAt: tokens.idToken?.payload?.exp ? tokens.idToken.payload.exp * 1000 : null,
+        },
+        lastRefresh: Date.now(),
+        persistedAt: Date.now(),
+        version: '1.0', // Version for future compatibility
+      };
+      localStorage.setItem('auth_state', JSON.stringify(authState));
+      console.log('Auth state persisted to localStorage with expiry:', new Date(authState.tokens.expiresAt || 0));
+    } catch (error) {
+      console.error('Failed to persist auth state:', error);
+      // If localStorage is full or unavailable, clear old data and try again
+      try {
+        localStorage.removeItem('auth_state');
+        localStorage.setItem('auth_state', JSON.stringify(authState));
+        console.log('Auth state persisted after clearing old data');
+      } catch (retryError) {
+        console.error('Failed to persist auth state even after cleanup:', retryError);
+      }
+    }
+  };
+
+  const restoreAuthState = (): { user: CognitoUser; tokens: any } | null => {
+    try {
+      const storedState = localStorage.getItem('auth_state');
+      if (!storedState) {
+        console.log('No stored auth state found');
+        return null;
+      }
+
+      const authState = JSON.parse(storedState);
+
+      // Validate the structure of stored state
+      if (!authState.user || !authState.tokens || !authState.persistedAt) {
+        console.log('Invalid stored auth state structure, clearing');
+        localStorage.removeItem('auth_state');
+        return null;
+      }
+
+      // Check if stored state is too old (more than 7 days)
+      const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+      if (Date.now() - authState.persistedAt > maxAge) {
+        console.log('Stored auth state is too old, clearing');
+        localStorage.removeItem('auth_state');
+        return null;
+      }
+
+      // Check if tokens are expired (with 5-minute buffer)
+      const fiveMinutes = 5 * 60 * 1000;
+      if (authState.tokens.expiresAt && (Date.now() + fiveMinutes) > authState.tokens.expiresAt) {
+        console.log('Stored tokens are expired or will expire soon, will attempt refresh');
+      }
+
+      console.log('Successfully restored auth state from localStorage');
+      return {
+        user: authState.user,
+        tokens: authState.tokens,
+      };
+    } catch (error) {
+      console.error('Failed to restore auth state:', error);
+      localStorage.removeItem('auth_state');
+      return null;
+    }
+  };
+
+  const clearPersistedAuthState = () => {
+    try {
+      localStorage.removeItem('auth_state');
+      console.log('Persisted auth state cleared');
+    } catch (error) {
+      console.error('Failed to clear persisted auth state:', error);
+    }
+  };
+
+  const refreshTokensWithRetry = async (maxRetries = 3): Promise<any> => {
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`Token refresh attempt ${attempt}/${maxRetries}`);
+
+        // Check network connectivity before attempting refresh
+        if (!navigator.onLine) {
+          throw new Error('Network offline, cannot refresh tokens');
+        }
+
+        const session = await fetchAuthSession({ forceRefresh: true });
+
+        if (!session.tokens?.accessToken || !session.tokens?.idToken) {
+          throw new Error('Refresh returned invalid tokens');
+        }
+
+        // Validate token expiry
+        const tokenExpiry = session.tokens.idToken?.payload?.exp;
+        const now = Math.floor(Date.now() / 1000);
+
+        if (tokenExpiry && tokenExpiry <= now) {
+          throw new Error('Refreshed tokens are already expired');
+        }
+
+        console.log('Token refresh successful, expires at:', new Date((tokenExpiry || 0) * 1000));
+        return session;
+      } catch (error) {
+        lastError = error;
+        console.error(`Token refresh attempt ${attempt} failed:`, error);
+
+        // Check if this is a network error that we should retry
+        const authError = AuthErrorHandler.processError(error, 'refreshTokens');
+
+        // Don't retry if it's the last attempt or error is not retryable
+        if (!authError.retryable || attempt === maxRetries) {
+          console.error('Token refresh failed permanently:', authError);
+          throw error;
+        }
+
+        // Wait before retrying (exponential backoff with jitter)
+        const baseDelay = 1000 * Math.pow(2, attempt - 1);
+        const jitter = Math.random() * 1000; // Add randomness to prevent thundering herd
+        const delay = Math.min(baseDelay + jitter, 15000); // Cap at 15 seconds
+
+        console.log(`Waiting ${Math.round(delay)}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError;
+  };
+
   // Check if user is authenticated on mount
   useEffect(() => {
     console.log('AuthProvider mounted, checking auth state...');
     checkAuthState();
+
+    // Cleanup function for component unmount
+    return () => {
+      if (tokenRefreshInterval) {
+        clearInterval(tokenRefreshInterval);
+      }
+      // Clean up all AuthProvider tasks
+      componentCleanupManager.cleanupComponent('AuthProvider');
+    };
   }, []);
 
   // Set up periodic token refresh to prevent expiration
   useEffect(() => {
+    // Clear existing interval
+    if (tokenRefreshInterval) {
+      clearInterval(tokenRefreshInterval);
+      setTokenRefreshInterval(null);
+    }
+
     if (!isAuthenticated) return;
 
     // Refresh tokens every 45 minutes (tokens expire after 1 hour)
     const refreshInterval = setInterval(async () => {
       try {
-        console.log('Refreshing tokens...');
-        await fetchAuthSession({ forceRefresh: true });
-        console.log('Tokens refreshed successfully');
+        // Skip refresh if user is not active (tab is hidden and hasn't been active for 10+ minutes)
+        const tenMinutes = 10 * 60 * 1000;
+        const isTabHidden = document.hidden;
+        const timeSinceLastRefresh = lastTokenRefresh ? Date.now() - lastTokenRefresh : 0;
+
+        if (isTabHidden && timeSinceLastRefresh > tenMinutes) {
+          console.log('Skipping periodic refresh - tab inactive for too long');
+          return;
+        }
+
+        console.log('Periodic token refresh starting...');
+        const session = await refreshTokensWithRetry();
+
+        if (session.tokens && user) {
+          // Update persisted state with new tokens
+          persistAuthState(user, session.tokens);
+          setLastTokenRefresh(Date.now());
+          console.log('Periodic token refresh successful');
+        }
       } catch (error) {
-        console.error('Failed to refresh tokens:', error);
-        // If refresh fails, check auth state to handle logout
-        await checkAuthState();
+        console.error('Periodic token refresh failed:', error);
+
+        // Check if this is a recoverable error
+        const authError = AuthErrorHandler.processError(error, 'periodicRefresh');
+
+        if (authError.retryable) {
+          console.log('Token refresh failed but retryable, will try again next cycle');
+
+          // For network errors, try again in 5 minutes instead of waiting full cycle
+          if (authError.type === 'network') {
+            const retryTimeout = setTimeout(async () => {
+              try {
+                console.log('Retrying token refresh after network error...');
+                const retrySession = await refreshTokensWithRetry(1); // Single retry
+                if (retrySession.tokens && user) {
+                  persistAuthState(user, retrySession.tokens);
+                  setLastTokenRefresh(Date.now());
+                  console.log('Token refresh retry successful');
+                }
+              } catch (retryError) {
+                console.error('Token refresh retry failed:', retryError);
+              }
+            }, 5 * 60 * 1000); // 5 minutes
+
+            // Register timeout for cleanup
+            componentCleanupManager.registerTimeout(retryTimeout, 'AuthProvider', 'Token refresh retry');
+          }
+        } else {
+          console.log('Token refresh failed with non-retryable error, checking auth state');
+          // If refresh fails with non-retryable error, check auth state to handle logout
+          await checkAuthState(true); // Skip persistence check since we know there's an issue
+        }
       }
     }, 45 * 60 * 1000); // 45 minutes
 
-    return () => clearInterval(refreshInterval);
-  }, [isAuthenticated]);
+    setTokenRefreshInterval(refreshInterval);
+
+    // Register interval for cleanup
+    componentCleanupManager.registerInterval(refreshInterval, 'AuthProvider', 'Token refresh interval');
+
+    return () => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
+    };
+  }, [isAuthenticated, user]);
 
   // Refresh tokens when user returns to the tab/window
   useEffect(() => {
@@ -57,30 +268,146 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (!document.hidden) {
         try {
           console.log('Tab became visible, checking token validity...');
-          await fetchAuthSession({ forceRefresh: true });
+
+          // Check if it's been more than 5 minutes since last refresh
+          const fiveMinutes = 5 * 60 * 1000;
+          const shouldRefresh = !lastTokenRefresh || (Date.now() - lastTokenRefresh > fiveMinutes);
+
+          if (shouldRefresh) {
+            const session = await refreshTokensWithRetry();
+
+            if (session.tokens && user) {
+              persistAuthState(user, session.tokens);
+              setLastTokenRefresh(Date.now());
+              console.log('Token refresh on visibility change successful');
+            }
+          } else {
+            console.log('Skipping token refresh, recent refresh detected');
+          }
         } catch (error) {
           console.error('Failed to refresh tokens on visibility change:', error);
-          await checkAuthState();
+
+          // Check if this is a recoverable error
+          const authError = AuthErrorHandler.processError(error, 'visibilityRefresh');
+
+          if (!authError.retryable) {
+            console.log('Non-retryable error on visibility change, checking auth state');
+            await checkAuthState(true);
+          }
+        }
+      }
+    };
+
+    // Also handle online/offline events for network recovery
+    const handleOnline = async () => {
+      if (isAuthenticated) {
+        console.log('Network connection restored, validating auth state...');
+        try {
+          // Quick validation without forcing refresh
+          await fetchAuthSession({ forceRefresh: false });
+        } catch (error) {
+          console.log('Auth validation failed after network restore, checking state');
+          await checkAuthState(true);
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isAuthenticated]);
+    window.addEventListener('online', handleOnline);
 
-  const checkAuthState = async () => {
+    // Register event listeners for cleanup
+    componentCleanupManager.registerEventListener(
+      document,
+      'visibilitychange',
+      handleVisibilityChange,
+      'AuthProvider',
+      'Visibility change handler'
+    );
+    componentCleanupManager.registerEventListener(
+      window,
+      'online',
+      handleOnline,
+      'AuthProvider',
+      'Online event handler'
+    );
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [isAuthenticated, lastTokenRefresh, user]);
+
+  const checkAuthState = async (skipPersistenceCheck = false) => {
     try {
       setIsLoading(true);
-      console.log('Checking auth state...');
+      console.log('Checking auth state...', { skipPersistenceCheck });
 
-      // First try to get session to check if we have valid tokens
-      console.log('Fetching auth session...');
-      const session = await fetchAuthSession({ forceRefresh: false });
+      let session;
+      let currentUser;
+
+      // First, try to restore from localStorage if not skipping
+      if (!skipPersistenceCheck) {
+        const restoredState = restoreAuthState();
+        if (restoredState) {
+          console.log('Found persisted auth state, validating...');
+
+          try {
+            // Validate the restored state by checking current session
+            session = await fetchAuthSession({ forceRefresh: false });
+
+            if (session.tokens?.accessToken && session.tokens?.idToken) {
+              // Check if tokens are still valid (with 5-minute buffer)
+              const now = Math.floor(Date.now() / 1000);
+              const tokenExpiry = session.tokens.idToken?.payload?.exp;
+              const fiveMinutes = 5 * 60;
+
+              if (tokenExpiry && (tokenExpiry - now) > fiveMinutes) {
+                // Tokens are valid with buffer, restore user state immediately
+                setUser(restoredState.user);
+                setIsAuthenticated(true);
+                setAuthFlowState('authenticated');
+                setLastTokenRefresh(Date.now());
+                console.log('Successfully restored auth state from localStorage');
+                return;
+              } else if (tokenExpiry && tokenExpiry > now) {
+                // Tokens are valid but will expire soon, restore state and refresh in background
+                setUser(restoredState.user);
+                setIsAuthenticated(true);
+                setAuthFlowState('authenticated');
+                setLastTokenRefresh(Date.now());
+                console.log('Restored auth state, will refresh tokens in background');
+
+                // Refresh tokens in background without blocking UI
+                setTimeout(async () => {
+                  try {
+                    const refreshedSession = await refreshTokensWithRetry();
+                    if (refreshedSession.tokens && restoredState.user) {
+                      persistAuthState(restoredState.user, refreshedSession.tokens);
+                      setLastTokenRefresh(Date.now());
+                      console.log('Background token refresh successful');
+                    }
+                  } catch (error) {
+                    console.error('Background token refresh failed:', error);
+                  }
+                }, 100);
+
+                return;
+              } else {
+                console.log('Restored tokens are expired, attempting refresh...');
+              }
+            }
+          } catch (restoreError) {
+            console.log('Failed to validate restored state, proceeding with fresh check:', restoreError);
+          }
+        }
+      }
+
+      // Get fresh session from Cognito
+      console.log('Fetching fresh auth session...');
+      session = await fetchAuthSession({ forceRefresh: false });
       console.log('Session fetched:', {
         hasAccessToken: !!session.tokens?.accessToken,
-        hasIdToken: !!session.tokens?.idToken,
-        hasRefreshToken: !!session.tokens?.refreshToken
+        hasIdToken: !!session.tokens?.idToken
       });
 
       // Check if we have valid tokens
@@ -100,29 +427,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (tokenExpiry && tokenExpiry < now) {
         console.log('Tokens expired, attempting refresh...');
-        // Try to refresh tokens
-        const refreshedSession = await fetchAuthSession({ forceRefresh: true });
-
-        if (!refreshedSession.tokens?.accessToken || !refreshedSession.tokens?.idToken) {
+        try {
+          // Try to refresh tokens with retry logic
+          session = await refreshTokensWithRetry();
+          console.log('Tokens refreshed successfully');
+        } catch (refreshError) {
+          console.error('Failed to refresh expired tokens:', refreshError);
           throw new Error('Failed to refresh expired tokens');
         }
-        console.log('Tokens refreshed successfully');
       }
 
       // Now try to get current user
       console.log('Getting current user...');
-      const currentUser = await getCurrentUser();
+      currentUser = await getCurrentUser();
       console.log('Current user retrieved:', {
         username: currentUser?.username,
         userId: currentUser?.userId
-      });
-
-      console.log('Auth check successful:', {
-        hasUser: !!currentUser,
-        hasAccessToken: !!session.tokens.accessToken,
-        hasIdToken: !!session.tokens.idToken,
-        tokenExpiry: session.tokens.idToken?.payload?.exp,
-        currentTime: now
       });
 
       if (currentUser && session.tokens) {
@@ -138,9 +458,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(cognitoUser);
         setIsAuthenticated(true);
         setAuthFlowState('authenticated');
+        setLastTokenRefresh(Date.now());
+
+        // Persist the successful auth state
+        persistAuthState(cognitoUser, session.tokens);
+
         console.log('User authenticated successfully');
       } else {
         console.log('Missing user or tokens, setting unauthenticated state');
+        clearPersistedAuthState();
         setUser(null);
         setIsAuthenticated(false);
         // Only reset to idle if not in a registration flow
@@ -155,8 +481,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const authError = AuthErrorHandler.processError(error, 'checkAuthState');
       console.log('Processed auth state error:', authError);
 
+      // Handle network errors differently - don't clear state immediately
+      if (authError.type === 'network' && authError.retryable) {
+        console.log('Network error during auth check, will retry but keep current state if available');
+
+        // If we have a persisted state, try to use it temporarily
+        const restoredState = restoreAuthState();
+        if (restoredState && !skipPersistenceCheck) {
+          console.log('Using persisted state during network error');
+          setUser(restoredState.user);
+          setIsAuthenticated(true);
+          setAuthFlowState('authenticated');
+          setLastTokenRefresh(Date.now());
+
+          // Schedule a retry in 30 seconds
+          setTimeout(() => {
+            console.log('Retrying auth state check after network error');
+            checkAuthState(false);
+          }, 30000);
+
+          return;
+        }
+      }
+
+      // For non-network errors or when no persisted state is available, clear everything
+      clearPersistedAuthState();
       setUser(null);
       setIsAuthenticated(false);
+      setLastTokenRefresh(null);
+
       // Only reset to idle if not in a registration flow
       if (authFlowState !== 'confirming') {
         setAuthFlowState('idle');
@@ -178,12 +531,39 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       });
 
       if (result.isSignedIn) {
-        await checkAuthState();
-        setAuthFlowState('authenticated');
+        // Get fresh session and user data
+        const session = await fetchAuthSession({ forceRefresh: false });
+        const currentUser = await getCurrentUser();
+
+        if (currentUser && session.tokens) {
+          const cognitoUser: CognitoUser = {
+            username: currentUser.username,
+            attributes: {
+              email: currentUser.signInDetails?.loginId || email,
+              sub: currentUser.userId,
+              name: currentUser.signInDetails?.loginId || currentUser.username,
+            },
+          };
+
+          setUser(cognitoUser);
+          setIsAuthenticated(true);
+          setAuthFlowState('authenticated');
+          setLastTokenRefresh(Date.now());
+
+          // Persist the successful auth state
+          persistAuthState(cognitoUser, session.tokens);
+
+          console.log('Login successful, auth state persisted');
+        } else {
+          throw new Error('Failed to retrieve user data after login');
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
       setIsLoading(false);
+
+      // Clear any invalid persisted state
+      clearPersistedAuthState();
 
       // Use enhanced error handling
       const authError = AuthErrorHandler.processError(error, 'login');
@@ -191,6 +571,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       // Throw user-friendly error message
       throw new Error(AuthErrorHandler.formatErrorMessage(authError, 'Login failed'));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -359,15 +741,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       setIsLoading(true);
 
+      // Clear token refresh interval
+      if (tokenRefreshInterval) {
+        clearInterval(tokenRefreshInterval);
+        setTokenRefreshInterval(null);
+      }
+
       // Clear local state immediately
       setUser(null);
       setIsAuthenticated(false);
       setAuthFlowState('idle');
       setPendingEmailState(null);
+      setLastTokenRefresh(null);
 
+      // Clear persisted auth state
+      clearPersistedAuthState();
 
-
-      // Clear any local storage items
+      // Clear any other local storage items
       localStorage.removeItem('auth_token');
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('draft_content_')) {
@@ -377,6 +767,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       // Sign out from Cognito
       await signOut();
+      console.log('Logout successful');
 
     } catch (error) {
       console.error('Logout error:', error);
@@ -446,8 +837,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const getToken = async (): Promise<string> => {
     try {
-      // Force refresh to get fresh tokens if current ones are expired
-      const session = await fetchAuthSession({ forceRefresh: true });
+      // First try to get current session without forcing refresh
+      let session = await fetchAuthSession({ forceRefresh: false });
+
+      // Check if token is expired or will expire soon (within 5 minutes)
+      const now = Math.floor(Date.now() / 1000);
+      const tokenExpiry = session.tokens?.idToken?.payload?.exp;
+      const fiveMinutes = 5 * 60; // 5 minutes in seconds
+
+      const needsRefresh = !session.tokens?.accessToken ||
+                          !tokenExpiry ||
+                          (tokenExpiry - now) < fiveMinutes;
+
+      if (needsRefresh) {
+        console.log('Token needs refresh, attempting refresh...');
+        session = await refreshTokensWithRetry();
+
+        if (session.tokens && user) {
+          // Update persisted state with new tokens
+          persistAuthState(user, session.tokens);
+          setLastTokenRefresh(Date.now());
+        }
+      }
+
       const token = session.tokens?.accessToken?.toString();
 
       if (!token) {
@@ -462,11 +874,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const authError = AuthErrorHandler.processError(error, 'getToken');
       console.error('Processed token error:', authError);
 
-      // If token refresh fails, user needs to log in again
-      if (error instanceof Error && error.message.includes('refresh')) {
+      // If token refresh fails with non-retryable error, user needs to log in again
+      if (!authError.retryable) {
+        console.log('Non-retryable token error, clearing auth state');
+        clearPersistedAuthState();
         setUser(null);
         setIsAuthenticated(false);
         setAuthFlowState('idle');
+        setLastTokenRefresh(null);
       }
 
       // Throw user-friendly error message
@@ -482,6 +897,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     isAuthenticated,
     authFlowState,
     pendingEmail,
+    lastTokenRefresh,
     login,
     logout,
     getToken,
@@ -490,6 +906,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     resendConfirmationCode,
     resetAuthFlow,
     setPendingEmail,
+    persistAuthState,
+    restoreAuthState,
+    clearPersistedAuthState,
     handleAuthError,
     canRetryOperation,
     getRetryDelay,

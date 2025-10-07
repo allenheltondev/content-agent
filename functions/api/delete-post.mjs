@@ -1,32 +1,22 @@
 import { DynamoDBClient, GetItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
-import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
+import { marshall } from '@aws-sdk/util-dynamodb';
 import { formatResponse, formatEmptyResponse } from '../utils/responses.mjs';
+import { decrementPostCount } from '../utils/tenant-statistics.mjs';
 
 const ddb = new DynamoDBClient();
+const eventbridge = new EventBridgeClient();
 
 export const handler = async (event) => {
-  console.log('Delete post event:', JSON.stringify(event, null, 2));
-
   try {
-    // Extract tenantId from authorizer context
-    const { tenantId, userId } = event.requestContext.authorizer;
-
-    // Extract postId from path parameters
-    const postId = event.pathParameters?.id;
+    const { tenantId } = event.requestContext.authorizer;
+    const { postId } = event.pathParameters;
 
     if (!tenantId) {
       console.error('Missing tenantId in authorizer context');
       return formatResponse(401, { error: 'Unauthorized' });
     }
 
-    if (!postId) {
-      console.error('Missing postId in path parameters');
-      return formatResponse(400, { error: 'Missing post ID' });
-    }
-
-    console.log('Deleting post:', { tenantId, postId });
-
-    // First, verify post ownership by getting the current item
     const getResponse = await ddb.send(new GetItemCommand({
       TableName: process.env.TABLE_NAME,
       Key: marshall({
@@ -36,18 +26,10 @@ export const handler = async (event) => {
     }));
 
     if (!getResponse.Item) {
-      console.log('Post not found:', { tenantId, postId });
+      console.warn('Post not found:', { tenantId, postId });
       return formatResponse(404, { error: 'Post not found' });
     }
 
-    const currentPost = unmarshall(getResponse.Item);
-    console.log('Post found, proceeding with deletion:', {
-      postId,
-      tenantId,
-      title: currentPost.title?.substring(0, 50)
-    });
-
-    // Remove post from DynamoDB using composite key
     await ddb.send(new DeleteItemCommand({
       TableName: process.env.TABLE_NAME,
       Key: marshall({
@@ -57,15 +39,33 @@ export const handler = async (event) => {
       ConditionExpression: 'attribute_exists(pk) AND attribute_exists(sk)'
     }));
 
-    console.log('Post deleted successfully:', { postId, tenantId });
+    try {
+      await decrementPostCount(tenantId);
+      console.log('Post count decremented successfully for tenant:', tenantId);
+    } catch (error) {
+      console.error('Failed to decrement post count for tenant:', tenantId, error);
+      // Don't block post deletion on statistics update failure
+    }
 
-    // Return 204 status code on successful deletion
-    return formatEmptyResponse();
+    try {
+      await eventbridge.send(new PutEventsCommand({
+        Entries: [{
+          DetailType: 'Delete Post',
+          Source: 'content-agent',
+          Detail: JSON.stringify({ tenantId, postId })
+        }]
+      }));
+
+    } catch (error) {
+      console.error('Failed to trigger async cleanup:', { postId, tenantId, error: error.message });
+      // Don't block post deletion on async cleanup invocation failure
+    }
+
+    return formatEmptyResponse(204);
 
   } catch (error) {
     console.error('Delete post error:', error);
 
-    // Handle conditional check failed (post doesn't exist)
     if (error.name === 'ConditionalCheckFailedException') {
       return formatResponse(404, { error: 'Post not found' });
     }

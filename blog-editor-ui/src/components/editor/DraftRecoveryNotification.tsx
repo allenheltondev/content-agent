@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { XMarkIcon, DocumentTextIcon, ClockIcon } from '@heroicons/react/24/outline';
 
 interface DraftData {
@@ -9,6 +9,7 @@ interface DraftData {
 
 interface DraftRecoveryNotificationProps {
   draftData: DraftData;
+  isVisible: boolean;
   onRecover: (data: DraftData) => void;
   onDiscard: () => void;
   onDismiss: () => void;
@@ -16,11 +17,33 @@ interface DraftRecoveryNotificationProps {
 
 export const DraftRecoveryNotification = ({
   draftData,
+  isVisible,
   onRecover,
   onDiscard,
   onDismiss
 }: DraftRecoveryNotificationProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [shouldRender, setShouldRender] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  // Handle visibility changes with smooth transitions
+  useEffect(() => {
+    if (isVisible) {
+      setShouldRender(true);
+      // Small delay to ensure DOM is ready for animation
+      const timer = setTimeout(() => {
+        setIsAnimating(true);
+      }, 10);
+      return () => clearTimeout(timer);
+    } else {
+      setIsAnimating(false);
+      // Wait for animation to complete before removing from DOM
+      const timer = setTimeout(() => {
+        setShouldRender(false);
+      }, 300); // Match transition duration
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible]);
 
   const formatTimestamp = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -44,8 +67,22 @@ export const DraftRecoveryNotification = ({
     return content.substring(0, maxLength) + '...';
   };
 
+  // Don't render if not visible and animation is complete
+  if (!shouldRender) {
+    return null;
+  }
+
   return (
-    <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 mb-4">
+    <div
+      className={`
+        bg-primary/10 border border-primary/30 rounded-lg p-4 mb-4
+        transition-all duration-300 ease-in-out
+        ${isAnimating
+          ? 'opacity-100 transform translate-y-0'
+          : 'opacity-0 transform -translate-y-2'
+        }
+      `}
+    >
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-3 flex-1">
           <DocumentTextIcon className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
@@ -83,7 +120,7 @@ export const DraftRecoveryNotification = ({
                   {draftData.content.length > 150 && (
                     <button
                       onClick={() => setIsExpanded(!isExpanded)}
-                      className="text-xs text-primary hover:text-primary-hover mt-1"
+                      className="text-xs text-primary hover:text-primary-hover mt-1 transition-colors duration-200"
                     >
                       {isExpanded ? 'Show less' : 'Show more'}
                     </button>
@@ -96,21 +133,21 @@ export const DraftRecoveryNotification = ({
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => onRecover(draftData)}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors duration-200"
               >
                 Recover Draft
               </button>
 
               <button
                 onClick={onDiscard}
-                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors duration-200"
               >
                 Discard
               </button>
 
               <button
                 onClick={onDismiss}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                className="text-xs text-gray-500 hover:text-gray-700 transition-colors duration-200"
               >
                 Dismiss
               </button>
@@ -120,7 +157,7 @@ export const DraftRecoveryNotification = ({
 
         <button
           onClick={onDismiss}
-          className="text-primary/60 hover:text-primary ml-4"
+          className="text-primary/60 hover:text-primary ml-4 transition-colors duration-200"
         >
           <XMarkIcon className="h-4 w-4" />
         </button>

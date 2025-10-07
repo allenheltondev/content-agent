@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { loadContent } from '../utils/content.mjs';
+import { incrementSuggestionCreated } from '../utils/tenant-statistics.mjs';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
@@ -57,7 +58,9 @@ export const createSuggestionsTool = {
           Item: marshall({
             pk: `${tenantId}#${contentId}`,
             sk: `suggestion#${id}`,
+            suggestionId: id,
             contentVersion: content.version,
+            status: 'pending',
             contextBefore,
             contextAfter,
             anchorText,
@@ -69,10 +72,19 @@ export const createSuggestionsTool = {
             reason: s.reason,
             priority: s.priority,
             type: s.type,
-            createdAt: Date.now(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             ttl: Math.floor(Date.now() / 1000) + (3 * 24 * 60 * 60) // 3 day TTL
           })
         }));
+
+        // Update tenant statistics for suggestion creation
+        try {
+          await incrementSuggestionCreated(tenantId, s.type);
+        } catch (statsError) {
+          console.error('Error updating statistics for suggestion creation:', statsError);
+          // Don't fail the suggestion creation if statistics update fails
+        }
 
         return { id };
       }));

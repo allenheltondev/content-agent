@@ -13,6 +13,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.895.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.895.0",
     "@aws-sdk/client-dynamodb": "^3.895.0",
+    "@aws-sdk/client-eventbridge": "^3.901.0",
     "@aws-sdk/client-ssm": "^3.896.0",
     "@aws-sdk/util-dynamodb": "^3.895.0"
   },
@@ -20,6 +21,7 @@
     "@aws-lambda-powertools/parameters": "^2.27.0",
     "@aws-sdk/client-bedrock-agentcore": "^3.896.0",
     "@extractus/article-extractor": "^8.0.20",
+    "@gomomento/sdk": "^1.116.0",
     "aws-jwt-verify": "^4.0.1",
     "crypto": "^1.0.1",
     "got": "^14.4.9",

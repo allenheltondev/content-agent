@@ -8,7 +8,7 @@ export const handler = async (event) => {
   try {
     const { tenantId } = event.requestContext.authorizer;
 
-    if (!tenantId ) {
+    if (!tenantId) {
       console.error('Missing tenantId in authorizer context');
       return formatResponse(401, { error: 'Unauthorized' });
     }
@@ -24,22 +24,20 @@ export const handler = async (event) => {
     const { writingTone, writingStyle, topics, skillLevel } = requestBody;
     const now = Date.now();
 
-    const profileRecord = {
-      pk: tenantId,
-      sk: 'profile',
-      tenantId,
-      writingTone,
-      writingStyle,
-      topics,
-      skillLevel,
-      isComplete: true,
-      createdAt: now,
-      updatedAt: now
-    };
-
     await ddb.send(new PutItemCommand({
       TableName: process.env.TABLE_NAME,
-      Item: marshall(profileRecord),
+      Item: marshall({
+        pk: tenantId,
+        sk: 'profile',
+        tenantId,
+        writingTone,
+        writingStyle,
+        topics,
+        skillLevel,
+        isComplete: true,
+        createdAt: now,
+        updatedAt: now
+      }),
       ConditionExpression: 'attribute_not_exists(pk) AND attribute_not_exists(sk)'
     }));
 

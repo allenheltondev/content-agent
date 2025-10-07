@@ -142,6 +142,36 @@
               "End": true
             }
           }
+        },
+        {
+          "StartAt": "Readability Agent",
+          "States": {
+            "Readability Agent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "${ReadabilityAgent}",
+                "Payload": {
+                  "tenantId": "{% $tenantId %}",
+                  "contentId": "{% $contentId %}",
+                  "sessionId": "{% $sessionId %}"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "End": true
+            }
+          }
         }
       ],
       "Catch": [
@@ -150,6 +180,31 @@
             "States.ALL"
           ],
           "Next": "Set Failed Status"
+        }
+      ],
+      "Next": "Summarize via Agent"
+    },
+    "Summarize via Agent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${SummarizeAgent}",
+        "Payload": {
+          "tenantId": "{% $tenantId %}",
+          "contentId": "{% $contentId %}",
+          "sessionId": "{% $sessionId %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
         }
       ],
       "Next": "Set Success Status"
@@ -177,9 +232,9 @@
           }
         }
       },
-      "Next": "Publish Completed Message"
+      "Next": "Publish Completed Message (Success)"
     },
-    "Publish Completed Message": {
+    "Publish Completed Message (Success)": {
       "Type": "Task",
       "Resource": "arn:aws:states:::events:putEvents",
       "Arguments": {
@@ -188,7 +243,7 @@
             "Detail": {
               "tenantId": "{% $tenantId %}",
               "contentId": "{% $contentId %}",
-              "sessionId": "{% $sessionId %}"
+              "success": true
             },
             "DetailType": "Content Analysis Completed",
             "Source": "content-agent"
@@ -219,6 +274,24 @@
             "S": "failed"
           }
         }
+      },
+      "Next": "Publish Completed Message (Failed)"
+    },
+    "Publish Completed Message (Failed)": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Arguments": {
+        "Entries": [
+          {
+            "Detail": {
+              "tenantId": "{% $tenantId %}",
+              "contentId": "{% $contentId %}",
+              "success": false
+            },
+            "DetailType": "Content Analysis Completed",
+            "Source": "content-agent"
+          }
+        ]
       },
       "Next": "Fail"
     },

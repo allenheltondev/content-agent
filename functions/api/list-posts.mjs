@@ -5,10 +5,7 @@ import { formatResponse } from '../utils/responses.mjs';
 const ddb = new DynamoDBClient();
 
 export const handler = async (event) => {
-  console.log('List posts event:', JSON.stringify(event, null, 2));
-
   try {
-    // Extract tenantId from authorizer context
     const { tenantId } = event.requestContext.authorizer;
 
     if (!tenantId) {
@@ -16,9 +13,6 @@ export const handler = async (event) => {
       return formatResponse(401, { error: 'Unauthorized' });
     }
 
-    console.log('Querying posts for tenant:', tenantId);
-
-    // Query DynamoDB using GSI1 with tenantId scope
     const response = await ddb.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       IndexName: 'GSI1',
@@ -27,10 +21,9 @@ export const handler = async (event) => {
         ':tenantId': { S: tenantId },
         ':contentPrefix': { S: 'content#' }
       },
-      ScanIndexForward: false // Sort by timestamp descending (newest first)
+      ScanIndexForward: false
     }));
 
-    // Transform DynamoDB items to blog post format
     const posts = response.Items?.map(item => {
       const unmarshalled = unmarshall(item);
       return {
@@ -42,8 +35,6 @@ export const handler = async (event) => {
         updatedAt: unmarshalled.updatedAt,
       };
     }) || [];
-
-    console.log(`Found ${posts.length} posts for tenant ${tenantId}`);
 
     return formatResponse(200, { posts });
 

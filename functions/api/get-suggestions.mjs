@@ -5,28 +5,15 @@ import { formatResponse } from '../utils/responses.mjs';
 const ddb = new DynamoDBClient();
 
 export const handler = async (event) => {
-  console.log('Get suggestions event:', JSON.stringify(event, null, 2));
-
   try {
-    // Extract tenantId from authorizer context
-    const { tenantId, userId } = event.requestContext.authorizer;
-
-    // Extract postId from path parameters
-    const postId = event.pathParameters?.id;
+    const { tenantId } = event.requestContext.authorizer;
+    const { postId } = event.pathParameters;
 
     if (!tenantId) {
       console.error('Missing tenantId in authorizer context');
       return formatResponse(401, { error: 'Unauthorized' });
     }
 
-    if (!postId) {
-      console.error('Missing postId in path parameters');
-      return formatResponse(400, { error: 'Missing post ID' });
-    }
-
-    console.log('Getting suggestions for post:', { tenantId, postId });
-
-    // First verify post ownership by checking if the post exists and belongs to the tenant
     const postResponse = await ddb.send(new GetItemCommand({
       TableName: process.env.TABLE_NAME,
       Key: marshall({
@@ -36,21 +23,24 @@ export const handler = async (event) => {
     }));
 
     if (!postResponse.Item) {
-      console.log('Post not found or access denied:', { tenantId, postId });
-      return formatResponse(403, { error: 'Access denied' });
+      console.warn('Post not found or access denied:', { tenantId, postId });
+      return formatResponse(404, { message: 'Post not found' });
     }
 
-    // Query suggestions using composite key pattern
     const suggestionsResponse = await ddb.send(new QueryCommand({
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'pk = :pk AND begins_with(sk, :suggestionPrefix)',
+      FilterExpression: 'attribute_not_exists(#status) OR #status = :pendingStatus',
+      ExpressionAttributeNames: {
+        '#status': 'status'
+      },
       ExpressionAttributeValues: {
         ':pk': { S: `${tenantId}#${postId}` },
-        ':suggestionPrefix': { S: 'suggestion#' }
+        ':suggestionPrefix': { S: 'suggestion#' },
+        ':pendingStatus': { S: 'pending' }
       }
     }));
 
-    // Transform DynamoDB items to suggestion format
     const suggestions = suggestionsResponse.Items?.map(item => {
       const unmarshalled = unmarshall(item);
       return {
@@ -66,17 +56,34 @@ export const handler = async (event) => {
         contextBefore: unmarshalled.contextBefore,
         contextAfter: unmarshalled.contextAfter,
         anchorText: unmarshalled.anchorText,
-        createdAt: unmarshalled.createdAt
+        status: unmarshalled.status || 'pending',
+        createdAt: unmarshalled.createdAt,
+        updatedAt: unmarshalled.updatedAt
       };
     }) || [];
 
-    console.log(`Found ${suggestions.length} suggestions for post ${postId} in tenant ${tenantId}`);
-
-    return formatResponse(200, suggestions);
-
+    const summary = await getSummary(tenantId, postId, postResponse.Item.version.N);
+    return formatResponse(200, {
+      suggestions,
+      ...summary && { summary }
+    });
   } catch (error) {
     console.error('Get suggestions error:', error);
 
     return formatResponse(500, { message: 'Something went wrong' });
+  }
+};
+
+const getSummary = async (tenantId, contentId, version) => {
+  const response = await ddb.send(new GetItemCommand({
+    TableName: process.env.TABLE_NAME,
+    Key: marshall({
+      pk: `${tenantId}#${contentId}`,
+      sk: `summary#${version}`
+    })
+  }));
+
+  if (response.Item) {
+    return response.Item.summary.S;
   }
 };

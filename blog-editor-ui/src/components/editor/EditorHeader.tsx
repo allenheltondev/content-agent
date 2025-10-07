@@ -1,10 +1,8 @@
-import { useState, useEffect } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon, CloudArrowUpIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 
 interface EditorHeaderProps {
-  title: string;
-  onTitleChange: (title: string) => void;
   isSaving: boolean;
   isDirty: boolean;
   lastSaved: Date | null;
@@ -13,8 +11,6 @@ interface EditorHeaderProps {
 }
 
 export const EditorHeader = ({
-  title,
-  onTitleChange,
   isSaving,
   isDirty,
   lastSaved,
@@ -22,19 +18,6 @@ export const EditorHeader = ({
   isNewPost = false
 }: EditorHeaderProps) => {
   const navigate = useNavigate();
-  const [titleValue, setTitleValue] = useState(title);
-
-  // Update local title when prop changes
-  useEffect(() => {
-    setTitleValue(title);
-  }, [title]);
-
-  // Handle title input changes
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value;
-    setTitleValue(newTitle);
-    onTitleChange(newTitle);
-  };
 
   // Format last saved time
   const formatLastSaved = (date: Date | null) => {
@@ -70,7 +53,7 @@ export const EditorHeader = ({
       return (
         <div className="flex items-center text-sm text-gray-500">
           <div className="h-2 w-2 bg-orange-400 rounded-full mr-2" />
-          {titleValue.trim() ? 'Ready to create' : 'Enter title to create'}
+          Ready to create
         </div>
       );
     }
@@ -114,16 +97,11 @@ export const EditorHeader = ({
             <ArrowLeftIcon className="h-5 w-5" />
           </button>
 
-          {/* Title input */}
+          {/* Editor title */}
           <div className="flex-1 min-w-0">
-            <input
-              type="text"
-              value={titleValue}
-              onChange={handleTitleChange}
-              placeholder={isNewPost ? "Enter title for your new post..." : "Enter post title..."}
-              className="w-full text-lg sm:text-xl font-semibold text-gray-900 placeholder-gray-400 border-none outline-none focus:ring-0 p-0 bg-transparent"
-              maxLength={200}
-            />
+            <h1 className="text-lg sm:text-xl font-semibold text-gray-900">
+              {isNewPost ? 'New Post' : 'Edit Post'}
+            </h1>
           </div>
         </div>
 
@@ -132,16 +110,16 @@ export const EditorHeader = ({
           <div className="text-left sm:text-right order-2 sm:order-1">
             <SaveStatus />
             <div className="text-xs text-gray-500 mt-1">
-              {isNewPost ? (titleValue.trim() ? 'Click Create Post to save' : 'Title required') : formatLastSaved(lastSaved)}
+              {isNewPost ? 'Click Create Post to save' : formatLastSaved(lastSaved)}
             </div>
           </div>
 
          {/* Manual save button */}
           <button
             onClick={onSave}
-            disabled={isNewPost ? (isSaving || !titleValue.trim()) : (!isDirty || isSaving)}
+            disabled={isNewPost ? isSaving : (!isDirty || isSaving)}
             className="order-1 sm:order-2 w-full sm:w-auto inline-flex items-center justify-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title={isNewPost ? "Create post (requires title)" : "Save now (Ctrl+S)"}
+            title={isNewPost ? "Create post" : "Save now (Ctrl+S)"}
           >
             <CloudArrowUpIcon className="h-4 w-4 mr-1" />
             <span className="hidden sm:inline">{isNewPost ? 'Create Post' : 'Save Now'}</span>
@@ -150,12 +128,7 @@ export const EditorHeader = ({
         </div>
       </div>
 
-      {/* Character count for title */}
-      {titleValue.length > 150 && (
-        <div className="mt-2 text-xs text-gray-500">
-          Title: {titleValue.length}/200 characters
-        </div>
-      )}
+
     </div>
   );
 };

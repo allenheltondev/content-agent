@@ -12,7 +12,8 @@ import type {
   UserProfile,
   CreateProfileRequest,
   UpdateProfileRequest,
-  ProfileResponse
+  ProfileResponse,
+  StatsResponse
 } from '../types';
 
 /**
@@ -291,12 +292,18 @@ export class ApiService {
   /**
    * Get suggestions for a specific blog post
    */
-  async getSuggestions(postId: string, signal?: AbortSignal): Promise<Suggestion[]> {
+  async getSuggestions(postId: string, signal?: AbortSignal): Promise<{
+    suggestions: Suggestion[];
+    summary?: string;
+  }> {
     if (!postId) {
       throw new Error('Post ID is required');
     }
     const response = await this.get<SuggestionsResponse>(`/api/posts/${encodeURIComponent(postId)}/suggestions`, signal);
-    return response.suggestions || [];
+    return {
+      suggestions: response.suggestions || [],
+      summary: response.summary
+    };
   }
 
   /**
@@ -307,6 +314,32 @@ export class ApiService {
       throw new Error('Suggestion ID is required');
     }
     await this.delete<void>(`/api/suggestions/${encodeURIComponent(suggestionId)}`, signal);
+  }
+
+  /**
+   * Update suggestion status (accept, reject, or delete)
+   */
+  async updateSuggestionStatus(
+    postId: string,
+    suggestionId: string,
+    status: 'accepted' | 'rejected' | 'deleted',
+    signal?: AbortSignal
+  ): Promise<void> {
+    if (!postId) {
+      throw new Error('Post ID is required');
+    }
+    if (!suggestionId) {
+      throw new Error('Suggestion ID is required');
+    }
+    if (!['accepted', 'rejected', 'deleted'].includes(status)) {
+      throw new Error('Status must be one of: accepted, rejected, deleted');
+    }
+
+    await this.post<void>(
+      `/api/posts/${encodeURIComponent(postId)}/suggestions/${encodeURIComponent(suggestionId)}/statuses`,
+      { status },
+      signal
+    );
   }
 
   /**
@@ -375,6 +408,13 @@ export class ApiService {
   async getProfile(signal?: AbortSignal): Promise<UserProfile> {
     const response = await this.get<ProfileResponse>('/api/profile', signal);
     return response.profile;
+  }
+
+  /**
+   * Get statistics for the authenticated user
+   */
+  async getStats(signal?: AbortSignal): Promise<StatsResponse> {
+    return this.get<StatsResponse>('/api/stats', signal);
   }
 }
 

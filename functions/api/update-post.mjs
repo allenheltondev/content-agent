@@ -1,63 +1,22 @@
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { z } from 'zod';
 import { formatResponse } from '../utils/responses.mjs';
 
 const ddb = new DynamoDBClient();
-
-// Zod schema for request validation
-const updatePostSchema = z.object({
-  title: z.string().max(200).optional(),
-  body: z.string().max(50000).optional(),
-  status: z.enum(['draft', 'review', 'finalized', 'published', 'abandoned']).optional()
-}).refine(data => Object.keys(data).length > 0, {
-  message: "At least one field must be provided for update"
-});
+const eventBridge = new EventBridgeClient();
 
 export const handler = async (event) => {
-  console.log('Update post event:', JSON.stringify(event, null, 2));
-
   try {
-    // Extract tenantId from authorizer context
-    const { tenantId, userId } = event.requestContext.authorizer;
-
-    // Extract postId from path parameters
-    const postId = event.pathParameters?.id;
+    const { tenantId } = event.requestContext.authorizer;
+    const { postId } = event.pathParameters;
 
     if (!tenantId) {
       console.error('Missing tenantId in authorizer context');
       return formatResponse(401, { error: 'Unauthorized' });
     }
+    const updateData = JSON.parse(event.body || '{}');
 
-    if (!postId) {
-      console.error('Missing postId in path parameters');
-      return formatResponse(400, { error: 'Missing post ID' });
-    }
-
-    // Parse and validate request body
-    let requestBody;
-    try {
-      requestBody = JSON.parse(event.body || '{}');
-    } catch (parseError) {
-      console.error('Invalid JSON in request body:', parseError);
-      return formatResponse(400, { error: 'Invalid JSON in request body' });
-    }
-
-    // Validate request body using Zod
-    const validationResult = updatePostSchema.safeParse(requestBody);
-    if (!validationResult.success) {
-      console.error('Validation failed:', validationResult.error);
-      return formatResponse(400, {
-        error: 'Validation failed',
-        details: validationResult.error.errors
-      });
-    }
-
-    const updateData = validationResult.data;
-
-    console.log('Updating post:', { tenantId, postId, updateData });
-
-    // First, verify post ownership by getting the current item
     const getResponse = await ddb.send(new GetItemCommand({
       TableName: process.env.TABLE_NAME,
       Key: marshall({
@@ -67,13 +26,15 @@ export const handler = async (event) => {
     }));
 
     if (!getResponse.Item) {
-      console.log('Post not found:', { tenantId, postId });
+      console.warn('Post not found:', { tenantId, postId });
       return formatResponse(404, { error: 'Post not found' });
     }
 
     const currentPost = unmarshall(getResponse.Item);
 
-    // Build update expression dynamically
+    const bodyChanged = updateData.body !== undefined && updateData.body !== currentPost.body;
+    const statusChanged = updateData.status !== undefined && updateData.status !== currentPost.status;
+
     const updateExpressions = [];
     const expressionAttributeNames = {};
     const expressionAttributeValues = {};
@@ -96,16 +57,16 @@ export const handler = async (event) => {
       expressionAttributeValues[':status'] = { S: updateData.status };
     }
 
-    // Always update version and updatedAt
-    updateExpressions.push('#version = #version + :one');
-    updateExpressions.push('#updatedAt = :updatedAt');
+    if (bodyChanged) {
+      updateExpressions.push('#version = #version + :one');
+      expressionAttributeNames['#version'] = 'version';
+      expressionAttributeValues[':one'] = { N: '1' };
+    }
 
-    expressionAttributeNames['#version'] = 'version';
+    updateExpressions.push('#updatedAt = :updatedAt');
     expressionAttributeNames['#updatedAt'] = 'updatedAt';
-    expressionAttributeValues[':one'] = { N: '1' };
     expressionAttributeValues[':updatedAt'] = { N: Date.now().toString() };
 
-    // Update post in DynamoDB and increment version number
     const updateResponse = await ddb.send(new UpdateItemCommand({
       TableName: process.env.TABLE_NAME,
       Key: marshall({
@@ -118,22 +79,43 @@ export const handler = async (event) => {
       ReturnValues: 'ALL_NEW'
     }));
 
-    // Transform updated item to response format
     const updatedItem = unmarshall(updateResponse.Attributes);
-    const updatedPost = {
+
+    // Transform the DynamoDB item to match the BlogPost interface
+    const blogPost = {
       id: updatedItem.contentId,
-      title: updatedItem.title || '',
-      body: updatedItem.body || '',
-      status: updatedItem.status || 'draft',
-      version: updatedItem.version || 1,
+      title: updatedItem.title,
+      body: updatedItem.body,
+      status: updatedItem.status,
+      version: updatedItem.version,
       createdAt: updatedItem.createdAt,
       updatedAt: updatedItem.updatedAt,
-      authorId: updatedItem.authorId
+      authorId: updatedItem.tenantId
     };
 
-    console.log('Post updated successfully:', { postId, tenantId, version: updatedPost.version });
+    try {
+      await eventBridge.send(new PutEventsCommand({
+        Entries: [{
+          Source: 'content-agent',
+          DetailType: 'Post Updated',
+          Detail: JSON.stringify({
+            tenantId,
+            postId,
+            version: updatedItem.version,
+            bodyChanged,
+            statusChanged,
+            newStatus: updatedItem.status
+          })
+        }]
+      }));
 
-    return formatResponse(200, updatedPost);
+      console.log('EventBridge event published for post update');
+    } catch (eventError) {
+      // Log error but don't fail the API response
+      console.error('Failed to publish EventBridge event:', eventError);
+    }
+
+    return formatResponse(200, blogPost);
 
   } catch (error) {
     console.error('Update post error:', error);

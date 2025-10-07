@@ -90,7 +90,7 @@ const updatedPost = await apiService.updatePost('post-id', {
 });
 
 // Get suggestions for a post
-const suggestions = await apiService.getSuggestions('post-id');
+const { suggestions, summary } = await apiService.getSuggestions('post-id');
 
 // Delete a suggestion
 await apiService.deleteSuggestion('suggestion-id');

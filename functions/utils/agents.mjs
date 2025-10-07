@@ -25,7 +25,7 @@ export const converse = async (model, systemPrompt, userPrompt, tools, options) 
         modelId: model,
         system: [{ text: systemPrompt }],
         messages: [...conversation, ...messages],
-        toolConfig: { tools: tools.map(t => { return { toolSpec: t.spec }; }) },
+        ...tools.length && { toolConfig: { tools: tools.map(t => { return { toolSpec: t.spec }; }) } },
         inferenceConfig: { maxTokens: MAX_TOKENS }
       });
 
@@ -158,7 +158,7 @@ const addToConversation = async (sessionId, actorId, messages) => {
 };
 
 const sanitizeResponse = (text, options = {}) => {
-  if (options.preserveThinkingTags) {
+  if (options?.preserveThinkingTags) {
     return text.trim();
   }
   return text.replace(/<thinking>[\s\S]*?<\/thinking>\s*/g, '').trim();

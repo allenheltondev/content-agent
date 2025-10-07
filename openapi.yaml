@@ -4,16 +4,6 @@ info:
   version: 1.0.0
   description: Multi-tenant blog post management API with AI-powered suggestions
 
-x-amazon-apigateway-authorizers:
-  LambdaAuthorizer:
-    type: request
-    authorizerUri:
-      Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BlogApiAuthorizer.Arn}/invocations
-    authorizerCredentials:
-      Fn::GetAtt: BlogApiAuthorizerInvokeRole.Arn
-    identitySource: method.request.header.Authorization
-    authorizerResultTtlInSeconds: 300
-
 x-amazon-apigateway-request-validators:
   Validate All:
     validateRequestParameters: true
@@ -47,8 +37,6 @@ paths:
       summary: List user's blog posts
       description: Retrieve all blog posts belonging to the authenticated user's tenant
       tags: [Posts]
-      security:
-        - LambdaAuthorizer: []
       responses:
         200:
           description: List of blog posts
@@ -72,8 +60,6 @@ paths:
       summary: Create new blog post
       description: Create a new blog post for the authenticated user
       tags: [Posts]
-      security:
-        - LambdaAuthorizer: []
       requestBody:
         required: true
         content:
@@ -99,21 +85,13 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /posts/{id}:
+  /posts/{postId}:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-        description: The blog post ID (contentId)
-
+      - $ref: '#/components/parameters/postId'
     get:
       summary: Get specific blog post
       description: Retrieve a specific blog post by ID, ensuring it belongs to the user's tenant
       tags: [Posts]
-      security:
-        - LambdaAuthorizer: []
       responses:
         200:
           description: Blog post details
@@ -139,8 +117,6 @@ paths:
       summary: Update blog post
       description: Update an existing blog post, ensuring it belongs to the user's tenant
       tags: [Posts]
-      security:
-        - LambdaAuthorizer: []
       requestBody:
         required: true
         content:
@@ -174,8 +150,6 @@ paths:
       summary: Delete blog post
       description: Delete a blog post, ensuring it belongs to the user's tenant
       tags: [Posts]
-      security:
-        - LambdaAuthorizer: []
       responses:
         204:
           description: Blog post deleted successfully
@@ -193,30 +167,26 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /posts/{id}/suggestions:
+  /posts/{postId}/suggestions:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-        description: The blog post ID (contentId)
-
+      - $ref: '#/components/parameters/postId'
     get:
       summary: Get suggestions for a blog post
       description: Retrieve all suggestions for a specific blog post, ensuring the post belongs to the user's tenant
       tags: [Suggestions]
-      security:
-        - LambdaAuthorizer: []
       responses:
         200:
           description: List of suggestions for the blog post
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Suggestion"
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Suggestion"
+                required: [ suggestions ]
         401:
           $ref: "#/components/responses/Unauthorized"
         403:
@@ -231,24 +201,22 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /suggestions/{id}:
+  /posts/{postId}/reviews:
     parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-        description: The suggestion ID
-
-    delete:
-      summary: Delete a suggestion
-      description: Delete a specific suggestion, ensuring it belongs to a post owned by the user's tenant
-      tags: [Suggestions]
-      security:
-        - LambdaAuthorizer: []
+      - $ref: "#/components/parameters/postId"
+    post:
+      summary: Start async review for a blog post
+      description: Trigger asynchronous content analysis workflow and return Momento auth token for real-time notifications
+      tags: [Reviews]
       responses:
-        204:
-          description: Suggestion deleted successfully
+        200:
+          description: Review started successfully, returns Momento auth token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StartReviewResponse"
+        400:
+          $ref: "#/components/responses/BadRequest"
         401:
           $ref: "#/components/responses/Unauthorized"
         403:
@@ -259,7 +227,88 @@ paths:
           $ref: "#/components/responses/InternalError"
       x-amazon-apigateway-integration:
         uri:
-          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DeleteSuggestionFunction.Arn}/invocations
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${StartReviewFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+  /posts/{postId}/suggestions/{suggestionId}/statuses:
+    parameters:
+      - $ref: '#/components/parameters/postId'
+      - $ref: '#/components/parameters/suggestionId'
+    post:
+      summary: Update suggestion status
+      description: Update the status of a specific suggestion (accept, reject, or delete), ensuring it belongs to a post owned by the user's tenant
+      tags: [Suggestions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [accepted, rejected, deleted]
+                  description: The new status for the suggestion
+            examples:
+              accept:
+                summary: Accept a suggestion
+                value:
+                  status: accepted
+              reject:
+                summary: Reject a suggestion
+                value:
+                  status: rejected
+              delete:
+                summary: Delete a suggestion
+                value:
+                  status: deleted
+      responses:
+        204:
+          description: Suggestion status updated successfully
+        400:
+          description: Invalid request body or status value
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Status must be one of: accepted, rejected, deleted"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UpdateSuggestionStatusFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
+  /stats:
+    get:
+      summary: Get writing statistics and insights
+      description: Retrieve comprehensive writing statistics, suggestion metrics, and AI-powered insights for the authenticated user
+      tags: [Statistics]
+      responses:
+        200:
+          description: Writing statistics and insights retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetStatsFunction.Arn}/invocations
         httpMethod: POST
         type: aws_proxy
 
@@ -268,8 +317,6 @@ paths:
       summary: Get user profile
       description: Retrieve the authenticated user's writing profile and preferences
       tags: [Profile]
-      security:
-        - LambdaAuthorizer: []
       responses:
         200:
           description: User profile retrieved successfully
@@ -296,8 +343,6 @@ paths:
       summary: Create user profile
       description: Create a new writing profile for the authenticated user during initial setup
       tags: [Profile]
-      security:
-        - LambdaAuthorizer: []
       requestBody:
         required: true
         content:
@@ -333,8 +378,6 @@ paths:
       summary: Update user profile
       description: Update the authenticated user's writing profile and preferences
       tags: [Profile]
-      security:
-        - LambdaAuthorizer: []
       requestBody:
         required: true
         content:
@@ -360,13 +403,21 @@ paths:
       x-amazon-apigateway-request-validator: Validate All
 
 components:
-  securitySchemes:
-    LambdaAuthorizer:
-      type: apiKey
-      name: Authorization
-      in: header
-      x-amazon-apigateway-authorizer:
-        $ref: "#/x-amazon-apigateway-authorizers/LambdaAuthorizer"
+  parameters:
+    postId:
+      name: postId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: The blog post ID
+    suggestionId:
+      name: suggestionId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: The suggestion ID
 
   schemas:
     BlogPost:
@@ -397,7 +448,7 @@ components:
           example: "This is the content of my blog post..."
         status:
           type: string
-          enum: [draft, review, finalized, published, abandoned]
+          enum: [draft, review, published, abandoned]
           description: Current status of the blog post
           example: "draft"
         version:
@@ -436,7 +487,7 @@ components:
           example: "This is the content of my new blog post..."
         status:
           type: string
-          enum: [draft, review, finalized, published, abandoned]
+          enum: [draft, review, published, abandoned]
           description: Initial status of the blog post
           default: "draft"
           example: "draft"
@@ -456,7 +507,7 @@ components:
           example: "This is the updated content..."
         status:
           type: string
-          enum: [draft, review, finalized, published, abandoned]
+          enum: [draft, review, published, abandoned]
           description: Updated status of the blog post
           example: "review"
 
@@ -475,6 +526,7 @@ components:
         - contextBefore
         - contextAfter
         - anchorText
+        - status
         - createdAt
       properties:
         id:
@@ -529,9 +581,18 @@ components:
           type: string
           description: The full text segment including context
           example: "Please recieve this email"
+        status:
+          type: string
+          enum: [pending, accepted, rejected, deleted, skipped]
+          description: Current status of the suggestion
+          example: "pending"
         createdAt:
           type: integer
           description: Unix timestamp when the suggestion was created
+          example: 1640995200
+        updatedAt:
+          type: integer
+          description: Unix timestamp when the suggestion was last updated
           example: 1640995200
 
     UserProfile:
@@ -575,7 +636,8 @@ components:
           items:
             type: string
           description: Array of topics the user writes about
-          example: ["technology", "productivity", "remote work", "custom: AI ethics"]
+          example:
+            ["technology", "productivity", "remote work", "custom: AI ethics"]
         skillLevel:
           type: string
           enum: [beginner, intermediate, advanced, expert]
@@ -628,7 +690,8 @@ components:
           minItems: 1
           maxItems: 20
           description: Array of topics the user writes about
-          example: ["technology", "productivity", "remote work", "custom: AI ethics"]
+          example:
+            ["technology", "productivity", "remote work", "custom: AI ethics"]
         skillLevel:
           type: string
           enum: [beginner, intermediate, advanced, expert]
@@ -665,6 +728,192 @@ components:
           enum: [beginner, intermediate, advanced, expert]
           description: Updated writing skill level
           example: "advanced"
+
+    StatsResponse:
+      type: object
+      required:
+        - totalPosts
+        - totalSuggestions
+        - acceptedSuggestions
+        - rejectedSuggestions
+        - skippedSuggestions
+        - deletedSuggestions
+        - acceptanceRate
+        - suggestionsByType
+        - insights
+        - writingPatterns
+      properties:
+        totalPosts:
+          type: integer
+          description: Total number of blog posts created by the user
+          minimum: 0
+          example: 15
+        totalSuggestions:
+          type: integer
+          description: Total number of suggestions received across all posts
+          minimum: 0
+          example: 127
+        acceptedSuggestions:
+          type: integer
+          description: Number of suggestions that have been accepted
+          minimum: 0
+          example: 89
+        rejectedSuggestions:
+          type: integer
+          description: Number of suggestions that have been rejected
+          minimum: 0
+          example: 23
+        skippedSuggestions:
+          type: integer
+          description: Number of suggestions that were automatically skipped
+          minimum: 0
+          example: 12
+        deletedSuggestions:
+          type: integer
+          description: Number of suggestions that have been deleted
+          minimum: 0
+          example: 3
+        acceptanceRate:
+          type: number
+          description: Ratio of accepted suggestions to total suggestions (0.0 to 1.0)
+          minimum: 0
+          maximum: 1
+          example: 0.70
+        suggestionsByType:
+          type: object
+          description: Breakdown of suggestions by type
+          properties:
+            grammar:
+              $ref: "#/components/schemas/SuggestionTypeStats"
+            spelling:
+              $ref: "#/components/schemas/SuggestionTypeStats"
+            style:
+              $ref: "#/components/schemas/SuggestionTypeStats"
+            fact:
+              $ref: "#/components/schemas/SuggestionTypeStats"
+            brand:
+              $ref: "#/components/schemas/SuggestionTypeStats"
+          example:
+            grammar:
+              total: 45
+              accepted: 32
+              rejected: 8
+            spelling:
+              total: 23
+              accepted: 20
+              rejected: 3
+        insights:
+          type: array
+          items:
+            $ref: "#/components/schemas/WritingInsight"
+          description: AI-powered insights about writing patterns and strengths
+          example:
+            - type: "strength"
+              category: "writing_style"
+              message: "Your writing consistently demonstrates clear structure and logical flow"
+              confidence: 0.85
+        writingPatterns:
+          $ref: "#/components/schemas/WritingPatterns"
+
+    SuggestionTypeStats:
+      type: object
+      required:
+        - total
+        - accepted
+        - rejected
+      properties:
+        total:
+          type: integer
+          description: Total suggestions of this type
+          minimum: 0
+          example: 45
+        accepted:
+          type: integer
+          description: Accepted suggestions of this type
+          minimum: 0
+          example: 32
+        rejected:
+          type: integer
+          description: Rejected suggestions of this type
+          minimum: 0
+          example: 8
+
+    WritingInsight:
+      type: object
+      required:
+        - type
+        - category
+        - message
+        - confidence
+      properties:
+        type:
+          type: string
+          enum: [strength, improvement, observation]
+          description: Type of insight
+          example: "strength"
+        category:
+          type: string
+          enum: [writing_style, grammar, content, structure]
+          description: Category of the insight
+          example: "writing_style"
+        message:
+          type: string
+          description: Human-readable insight message
+          example: "Your writing consistently demonstrates clear structure and logical flow"
+        confidence:
+          type: number
+          description: Confidence level of the insight (0.0 to 1.0)
+          minimum: 0
+          maximum: 1
+          example: 0.85
+
+    WritingPatterns:
+      type: object
+      required:
+        - averagePostLength
+        - commonTopics
+        - writingTrends
+      properties:
+        averagePostLength:
+          type: integer
+          description: Average length of posts in characters
+          minimum: 0
+          example: 1250
+        commonTopics:
+          type: array
+          items:
+            type: string
+          description: Most frequently used topics or keywords
+          example: ["technology", "productivity", "remote work"]
+        writingTrends:
+          type: string
+          description: Analysis of writing trends over time
+          example: "Posts are becoming more concise over time"
+
+    StartReviewResponse:
+      type: object
+      required:
+        - reviewId
+        - token
+        - endpoint
+        - expiresAt
+      properties:
+        reviewId:
+          type: string
+          description: Unique identifier for the review session
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        token:
+          type: string
+          description: Auth token for subscribing to review notifications
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        endpoint:
+          type: string
+          description: Polling endpoint for receiving review completion notifications
+          example: "https://api.example.com/reviews/550e8400-e29b-41d4-a716-446655440002/poll"
+        expiresAt:
+          type: integer
+          description: Unix timestamp when the token expires
+          example: 1640997000
 
     ErrorResponse:
       type: object
@@ -751,5 +1000,7 @@ tags:
     description: Blog post management operations
   - name: Suggestions
     description: AI-generated suggestion operations
+  - name: Statistics
+    description: Writing statistics and insights operations
   - name: Profile
     description: User profile and writing preferences management

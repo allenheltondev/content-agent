@@ -32,6 +32,13 @@ export interface Suggestion {
   createdAt: number;
 }
 
+export interface SuggestionWithActions extends Suggestion {
+  status: 'pending' | 'accepted' | 'rejected' | 'deleted' | 'skipped';
+  onAccept: () => Promise<void>;
+  onReject: () => Promise<void>;
+  onDelete: () => Promise<void>;
+}
+
 // API request/response types
 export interface ApiResponse<T> {
   data?: T;
@@ -56,6 +63,7 @@ export interface PostListResponse {
 
 export interface SuggestionsResponse {
   suggestions: Suggestion[];
+  summary?: string;
 }
 
 export interface SubmitReviewRequest {
@@ -139,6 +147,9 @@ export interface AuthContextType {
   authFlowState: AuthFlowState;
   pendingEmail: string | null;
 
+  // Token refresh management
+  lastTokenRefresh: number | null;
+
   // Methods with improved return types
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -158,6 +169,11 @@ export interface AuthContextType {
   // New flow management methods
   resetAuthFlow: () => void;
   setPendingEmail: (email: string) => void;
+
+  // Enhanced persistence methods
+  persistAuthState: (user: CognitoUser, tokens: any) => void;
+  restoreAuthState: () => { user: CognitoUser; tokens: any } | null;
+  clearPersistedAuthState: () => void;
 
   // Enhanced error recovery methods
   handleAuthError: (error: unknown, operation: string) => AuthError;
@@ -299,4 +315,101 @@ export interface DismissedInfoBoxes {
     dismissedAt: string; // ISO timestamp
     version: string; // App version when dismissed
   };
+}
+
+// Statistics types
+export interface StatsResponse {
+  totalPosts: number;
+  totalSuggestions: number;
+  acceptedSuggestions: number;
+  rejectedSuggestions: number;
+  skippedSuggestions: number;
+  deletedSuggestions: number;
+  acceptanceRate: number;
+  suggestionsByType: {
+    [key in SuggestionType]: {
+      total: number;
+      accepted: number;
+      rejected: number;
+    };
+  };
+  insights: WritingInsight[];
+  writingPatterns: {
+    averagePostLength: number;
+    commonTopics: string[];
+    writingTrends: string;
+  };
+}
+
+export interface WritingInsight {
+  type: 'strength' | 'improvement' | 'observation';
+  category: 'writing_style' | 'grammar' | 'content' | 'structure';
+  message: string;
+  confidence: number;
+}
+
+export interface TenantStats {
+  totalPosts: number;
+  totalSuggestions: number;
+  acceptanceRate: number;
+}
+
+// Review system types
+export interface ReviewSession {
+  reviewId: string;
+  tenantId: string;
+  contentId: string;
+  status: 'pending' | 'completed' | 'failed';
+  startedAt: number;
+  completedAt?: number;
+  token: string;
+  endpoint: string;
+  expiresAt: number;
+  // Backward compatibility fields (deprecated)
+  momentoToken?: string;
+  topicName?: string;
+}
+
+export interface StartReviewResponse {
+  reviewId: string;
+  token: string; // Simplified from momentoToken
+  endpoint: string; // Simplified from topicName
+  expiresAt: number;
+}
+
+export interface ReviewCompleteMessage {
+  type: 'review_complete';
+  reviewId: string;
+  contentId: string;
+  success: boolean;
+  completedAt: number;
+  error?: string;
+}
+
+export interface ReviewErrorMessage {
+  type: 'review_error';
+  reviewId: string;
+  contentId: string;
+  error: string;
+  failedAt: number;
+  retryable: boolean;
+}
+
+export type ReviewMessage = ReviewCompleteMessage | ReviewErrorMessage;
+
+export interface ReviewNotification {
+  id: string;
+  type: 'success' | 'error' | 'loading';
+  message: string;
+  showRefresh?: boolean;
+  onRefresh?: () => void;
+  onRetry?: () => void;
+  onDismiss?: () => void;
+}
+
+export interface ReviewServiceConfig {
+  baseUrl: string;
+  getAuthToken: () => Promise<string>;
+  pollingInterval?: number;
+  maxRetries?: number;
 }

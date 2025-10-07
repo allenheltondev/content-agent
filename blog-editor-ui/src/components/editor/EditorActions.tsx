@@ -6,6 +6,7 @@ import {
   InformationCircleIcon
 } from '@heroicons/react/24/outline';
 import type { BlogPost } from '../../types';
+import { SubmitButton } from './SubmitButton';
 
 interface EditorActionsProps {
   onSave: () => void;
@@ -15,6 +16,12 @@ interface EditorActionsProps {
   isDirty: boolean;
   canSubmit: boolean;
   post: BlogPost | null;
+  isReviewInProgress?: boolean;
+  title?: string;
+  content?: string;
+  onPostCreated?: (postId: string) => void;
+  hasUnsavedChanges?: boolean;
+  forceSave?: () => Promise<void>;
 }
 
 export const EditorActions = ({
@@ -24,7 +31,13 @@ export const EditorActions = ({
   isSaving,
   isDirty,
   canSubmit,
-  post
+  post,
+  isReviewInProgress = false,
+  title = '',
+  content = '',
+  onPostCreated,
+  hasUnsavedChanges = false,
+  forceSave
 }: EditorActionsProps) => {
 
   // Check if workflow actions should be disabled based on post status
@@ -127,21 +140,19 @@ export const EditorActions = ({
         {/* Right side - Workflow actions */}
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Submit for Review button */}
-          <button
-            onClick={onSubmitReview}
-            disabled={!canSubmit || isSaving || isDirty || isWorkflowDisabled}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            title={
-              isWorkflowDisabled ? "Cannot submit finalized or published posts" :
-              isDirty ? "Save your changes before submitting for review" :
-              isInReview ? "Post is already under review" :
-              "Submit this post for additional AI review"
-            }
-          >
-            <PaperAirplaneIcon className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">{isInReview ? 'Under Review' : 'Submit for Review'}</span>
-            <span className="sm:hidden">{isInReview ? 'Review' : 'Submit'}</span>
-          </button>
+          <SubmitButton
+            postId={post?.id || null}
+            title={title}
+            content={content}
+            isAutoSaving={isSaving}
+            onSubmit={onSubmitReview}
+            onPostCreated={onPostCreated}
+            post={post}
+            hasUnsavedChanges={hasUnsavedChanges}
+            forceSave={forceSave}
+            disabled={!canSubmit || isDirty || isWorkflowDisabled || isReviewInProgress || isInReview}
+            className="w-full sm:w-auto"
+          />
 
           {/* Finalize Draft button */}
           <button
@@ -173,7 +184,7 @@ export const EditorActions = ({
           {!isWorkflowDisabled && (
             <div className="hidden lg:flex items-center space-x-4">
               <span>
-                <strong>Submit for Review:</strong> Get additional AI suggestions
+                <strong>Submit for Review:</strong> Get real-time AI suggestions and feedback
               </span>
               <span>
                 <strong>Finalize:</strong> Mark as complete and ready to publish

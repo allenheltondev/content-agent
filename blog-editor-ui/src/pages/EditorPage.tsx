@@ -1,16 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { BlogPost } from '../types';
 import { apiService } from '../services/ApiService';
 import { useToast } from '../hooks/useToast';
-import { useAutoSave } from '../hooks/useAutoSave';
+import { useAutoSaveManager } from '../hooks/useAutoSaveManager';
 import { useDraftPersistence } from '../hooks/useDraftPersistence';
 import { useNewPostDraft } from '../hooks/useNewPostDraft';
+import { useIntelligentDraftRecovery } from '../hooks/useIntelligentDraftRecovery';
 import { useSuggestionManager } from '../hooks/useSuggestionManager';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { EditorHeader } from '../components/editor/EditorHeader';
+import { TitleEditor } from '../components/editor/TitleEditor';
 import { ContentEditor } from '../components/editor/ContentEditor';
-import { SuggestionList } from '../components/editor/SuggestionList';
+import { ContentSummary } from '../components/editor/ContentSummary';
+import { SuggestionsPanel } from '../components/editor/SuggestionsPanel';
 import { EditorActions } from '../components/editor/EditorActions';
 import { SuggestionStats } from '../components/editor/SuggestionStats';
 import { UndoNotification } from '../components/editor/UndoNotification';
@@ -22,6 +25,8 @@ import { NewPostRecoveryNotification } from '../components/editor/NewPostRecover
 import { ConflictResolutionModal } from '../components/editor/ConflictResolutionModal';
 import { LocalStorageManager } from '../utils/localStorage';
 import { useInfoBoxManager } from '../hooks/useInfoBoxManager';
+import { useAsyncReview } from '../hooks/useAsyncReview';
+import { ReviewNotificationContainer } from '../components/ReviewNotification';
 import {
   detectConflict,
   createConflictData,
@@ -29,15 +34,98 @@ import {
   type ConflictData,
   type ConflictResolution
 } from '../utils/conflictResolution';
+import { EditorErrorBoundary } from '../components/editor/EditorErrorBoundary';
+import { EditorFallbackUI } from '../components/editor/EditorFallbackUI';
+import { ErrorReportingManager } from '../utils/errorReporting';
+import { EditorBackupManager } from '../utils/editorBackup';
+import { useRenderPerformanceMonitor } from '../hooks/useRenderPerformanceMonitor';
+import { componentCleanupManager } from '../utils/componentCleanupManager';
+import { editorIntegrationManager } from '../utils/editorIntegrationManager';
 
-export const EditorPage = () => {
+export const EditorPage = memo(() => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
   const { isDismissed, dismissInfoBox } = useInfoBoxManager();
 
-  // Check if this is a new post
-  const isNewPost = id === 'new';
+  // Check if this is a new post - memoize to prevent re-calculations
+  const isNewPost = useMemo(() => id === 'new', [id]);
+
+  // Integration testing and monitoring
+  useEffect(() => {
+    // Perform integration health check after component mounts
+    const performIntegrationCheck = async () => {
+      try {
+        const healthCheck = await editorIntegrationManager.performHealthCheck();
+
+        if (healthCheck.overallHealth === 'critical') {
+          console.error('Critical editor integration issues detected:', healthCheck.recommendations);
+          // Could show user-friendly warning here if needed
+        } else if (healthCheck.overallHealth === 'warning') {
+          console.warn('Editor integration warnings:', healthCheck.recommendations);
+        }
+
+        // Log successful integration for debugging
+        console.log('Editor integration health check completed:', {
+          health: healthCheck.overallHealth,
+          authPersistent: healthCheck.integrationState.authenticationPersistent,
+          contentStable: healthCheck.integrationState.contentStable,
+          titleVisible: healthCheck.integrationState.titleEditorVisible,
+          draftIntelligent: healthCheck.integrationState.draftDialogIntelligent,
+          errorHandling: healthCheck.integrationState.errorHandlingActive,
+          cleanup: healthCheck.integrationState.cleanupConfigured
+        });
+      } catch (error) {
+        console.error('Integration health check failed:', error);
+      }
+    };
+
+    // Perform check after a short delay to allow component to fully initialize
+    const integrationCheckTimeout = setTimeout(performIntegrationCheck, 2000);
+
+    // Register timeout for cleanup
+    componentCleanupManager.registerTimeout(
+      integrationCheckTimeout,
+      'EditorPage',
+      'Integration health check'
+    );
+
+    return () => clearTimeout(integrationCheckTimeout);
+  }, []);
+
+  // Comprehensive cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      // Clean up all EditorPage-specific tasks
+      const cleanedTasks = componentCleanupManager.cleanupComponent('EditorPage');
+      if (cleanedTasks > 0) {
+        console.log(`EditorPage cleanup: removed ${cleanedTasks} tasks`);
+      }
+    };
+  }, []);
+
+  // Monitor render performance to detect flickering
+  useRenderPerformanceMonitor({
+    componentName: 'EditorPage',
+    flickerThreshold: 8, // 8 renders per second indicates flickering
+    enabled: true,
+    onFlickerDetected: (metrics) => {
+      // Report flickering for debugging
+      ErrorReportingManager.reportEditorError(
+        new Error('Content flickering detected'),
+        id || null,
+        'EditorPage',
+        Boolean(title.trim() || content.trim()),
+        {
+          renderMetrics: metrics,
+          postId: id,
+          isNewPost,
+          hasContent: Boolean(content.trim()),
+          hasTitle: Boolean(title.trim())
+        }
+      );
+    }
+  });
 
   const [post, setPost] = useState<BlogPost | null>(null);
   const [content, setContent] = useState('');
@@ -47,8 +135,8 @@ export const EditorPage = () => {
   usePageTitle(isNewPost ? 'New Post' : (title.trim() || 'Editor'));
   const [isLoading, setIsLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
-  const [showDraftRecovery, setShowDraftRecovery] = useState(false);
-  const [showNewPostRecovery, setShowNewPostRecovery] = useState(false);
+  const [hasDraftToRecover, setHasDraftToRecover] = useState(false);
+
   const [conflictData, setConflictData] = useState<ConflictData | null>(null);
   const [, setInitialLoadTimestamp] = useState<number>(0);
   const [showUndoNotification, setShowUndoNotification] = useState(false);
@@ -63,42 +151,72 @@ export const EditorPage = () => {
   // Navigation confirmation modal
   const [showNavigationConfirmation, setShowNavigationConfirmation] = useState(false);
 
-  // Auto-save hook - disabled for new posts until first save
+  // Auto-save hook with enhanced post ID handling and retry logic
   const {
     isSaving: isAutoSaving,
     lastSaved,
+    hasUnsavedChanges: hasAutoSaveUnsavedChanges,
     saveError,
     forceSave,
     clearError: clearSaveError
-  } = useAutoSave({
-    postId: id || '',
+  } = useAutoSaveManager({
+    postId: isNewPost ? null : (id || null),
     title,
     content,
     onSaveSuccess: (savedPost) => {
       setPost(savedPost);
       setIsDirty(false);
-      clearDraft(); // Clear draft after successful save
+      clearDraft(); // Clear draft after successful auto-save
     },
     onSaveError: (error) => {
       showError(`Auto-save failed: ${error}`);
     },
-    enabled: !!id && !!post && !isNewPost
+    onPostCreated: (newPostId) => {
+      // Navigate to the new post's editor page when created
+      navigate(`/editor/${newPostId}`, { replace: true });
+    },
+    enabled: true // Always enabled, hook handles new post logic internally
   });
 
   // Draft persistence hook - use "new" as postId for new posts
-  const { loadDraft, clearDraft } = useDraftPersistence({
+  const {
+    loadDraft,
+    clearDraft,
+    isDraftDifferent,
+    lastError: draftError,
+    clearError: clearDraftError
+  } = useDraftPersistence({
     postId: id || '',
     title,
     content,
-    enabled: !!id && !isNewPost
+    enabled: !!id && !isNewPost,
+    onError: (error) => {
+      // Show user-friendly error messages for draft issues
+      let userMessage: string;
+      switch (error.type) {
+        case 'quota_exceeded':
+          userMessage = 'Browser storage is full. Your draft may not be saved automatically. Consider clearing browser data.';
+          break;
+        case 'parse_error':
+          userMessage = 'Previous draft data was corrupted and has been cleared.';
+          break;
+        case 'storage_unavailable':
+          userMessage = 'Draft auto-save is not available in this browser.';
+          break;
+        case 'conflict':
+          userMessage = 'Unable to compare draft with current content. Please save your work manually.';
+          break;
+        default:
+          userMessage = 'Draft auto-save encountered an issue. Please save your work manually.';
+      }
+      showError(userMessage);
+    }
   });
 
   // New post draft persistence hook
   const {
-    loadDraft: loadNewPostDraft,
     clearDraft: clearNewPostDraft,
     showRecoveryPrompt: showNewPostRecoveryPrompt,
-    recoverDraft: recoverNewPostDraft,
     dismissRecoveryPrompt: dismissNewPostRecoveryPrompt
   } = useNewPostDraft({
     title,
@@ -106,9 +224,49 @@ export const EditorPage = () => {
     enabled: isNewPost
   });
 
+  // Intelligent draft recovery hook
+  const {
+    shouldShowDialog: shouldShowDraftDialog,
+    isVisible: isDraftDialogVisible,
+    handleDismiss: handleDraftDismiss,
+    handleRecover: handleDraftRecover,
+    handleDiscard: handleDraftDiscard
+  } = useIntelligentDraftRecovery({
+    draftData: hasDraftToRecover ? loadDraft() : null,
+    ageThresholdMs: 5000, // 5 seconds
+    showDelayMs: 500, // 500ms delay
+    onShow: () => {
+      console.log('Draft recovery dialog shown');
+    },
+    onDismiss: () => {
+      setHasDraftToRecover(false);
+    }
+  });
+
+  // Handle content changes - memoized to prevent unnecessary re-renders
+  const handleContentChange = useCallback((newContent: string) => {
+    setContent(newContent);
+    setIsDirty(true);
+  }, []);
+
+  // Handle title changes - memoized to prevent unnecessary re-renders
+  const handleTitleChange = useCallback((newTitle: string) => {
+    setTitle(newTitle);
+    setIsDirty(true);
+  }, []);
+
   // Suggestion management hook - disabled for new posts
+  // Memoize the config to prevent unnecessary re-renders
+  const suggestionConfig = useMemo(() => ({
+    postId: id || '',
+    maxUndoHistory: 10,
+    persistState: true,
+    autoSaveOnAccept: true
+  }), [id]);
+
   const {
     suggestions,
+    summary,
     isLoading: suggestionsLoading,
     error: suggestionsError,
     undoHistory,
@@ -120,15 +278,31 @@ export const EditorPage = () => {
     stats,
     canUndo,
     hasActiveSuggestions
-  } = useSuggestionManager(content, setContent, {
-    postId: id || '',
-    maxUndoHistory: 10,
-    persistState: true,
-    autoSaveOnAccept: true
+  } = useSuggestionManager(content, handleContentChange, suggestionConfig);
+
+  // Review hook - for real-time AI analysis
+  const {
+    notifications: reviewNotifications,
+    isReviewInProgress,
+    startReview,
+    removeNotification: removeReviewNotification,
+    canStartReview
+  } = useAsyncReview({
+    baseUrl: import.meta.env.VITE_API_BASE_URL || '/api',
+    onReviewComplete: () => {
+      // Refresh suggestions when review completes
+      if (!isNewPost && post) {
+        loadSuggestions();
+        showSuccess('New suggestions are available!');
+      }
+    },
+    onReviewError: (error) => {
+      showError(`Review failed: ${error}`);
+    }
   });
 
-  // Combined saving state
-  const isSaving = isAutoSaving || isCreatingPost;
+  // Combined saving state - memoized to prevent re-renders
+  const isSaving = useMemo(() => isAutoSaving || isCreatingPost, [isAutoSaving, isCreatingPost]);
 
   // Load post data on mount
   useEffect(() => {
@@ -182,31 +356,41 @@ export const EditorPage = () => {
         const draft = loadDraft();
 
         if (draft) {
-          // Check for conflicts
-          const hasConflict = detectConflict(
-            loadedPost,
-            draft.title,
-            draft.content,
-            draft.timestamp
-          );
+          // Check if draft content is different from loaded content
+          const draftIsDifferent = isDraftDifferent(loadedPost.title, loadedPost.body);
 
-          if (hasConflict) {
-            // Show conflict resolution modal
-            const conflict = createConflictData(
+          if (draftIsDifferent) {
+            // Check for conflicts
+            const hasConflict = detectConflict(
               loadedPost,
               draft.title,
               draft.content,
               draft.timestamp
             );
-            setConflictData(conflict);
-            // Set server version initially
-            setTitle(loadedPost.title);
-            setContent(loadedPost.body);
+
+            if (hasConflict) {
+              // Show conflict resolution modal
+              const conflict = createConflictData(
+                loadedPost,
+                draft.title,
+                draft.content,
+                draft.timestamp
+              );
+              setConflictData(conflict);
+              // Set server version initially
+              setTitle(loadedPost.title);
+              setContent(loadedPost.body);
+            } else {
+              // No conflict, show draft recovery notification
+              setTitle(loadedPost.title);
+              setContent(loadedPost.body);
+              setHasDraftToRecover(true);
+            }
           } else {
-            // No conflict, show draft recovery notification
+            // Draft content matches loaded content, clear draft and use server version
+            clearDraft();
             setTitle(loadedPost.title);
             setContent(loadedPost.body);
-            setShowDraftRecovery(true);
           }
         } else {
           // No draft, use server version
@@ -228,7 +412,7 @@ export const EditorPage = () => {
     };
 
     loadPost();
-  }, [id, navigate, showError, loadDraft, loadSuggestions, isNewPost]);
+  }, [id, navigate, showError, isNewPost]);
 
   // Manual save (force save)
   const handleSave = useCallback(async () => {
@@ -289,7 +473,7 @@ export const EditorPage = () => {
       console.error('Failed to save post:', error);
       showError('Failed to save post');
     }
-  }, [post, isDirty, isNewPost, title, content, forceSave, showSuccess, showError, navigate, clearDraft]);
+  }, [post, isDirty, isNewPost, title, content, forceSave, showSuccess, showError, navigate, clearNewPostDraft]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -304,6 +488,16 @@ export const EditorPage = () => {
     };
 
     document.addEventListener('keydown', handleKeyDown);
+
+    // Register event listener for cleanup
+    componentCleanupManager.registerEventListener(
+      document,
+      'keydown',
+      handleKeyDown,
+      'EditorPage',
+      'Keyboard shortcuts handler'
+    );
+
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isDirty, isSaving, handleSave]);
 
@@ -312,7 +506,7 @@ export const EditorPage = () => {
     if (saveError && (isDirty || content || title)) {
       clearSaveError();
     }
-  }, [saveError, isDirty, content, title, clearSaveError]);
+  }, [saveError, isDirty, content, title]);
 
   // Warn user about unsaved changes when leaving the page
   useEffect(() => {
@@ -329,36 +523,34 @@ export const EditorPage = () => {
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Register event listener for cleanup
+    componentCleanupManager.registerEventListener(
+      window,
+      'beforeunload',
+      handleBeforeUnload,
+      'EditorPage',
+      'Before unload handler'
+    );
+
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty, isNewPost, title, content]);
 
-  // Handle content changes
-  const handleContentChange = (newContent: string) => {
-    setContent(newContent);
-    setIsDirty(true);
-  };
-
-  // Handle title changes
-  const handleTitleChange = (newTitle: string) => {
-    setTitle(newTitle);
-    setIsDirty(true);
-  };
-
-  // Handle draft recovery
+  // Handle draft recovery with intelligent system
   const handleRecoverDraft = useCallback((draftData: { title: string; content: string; timestamp: number }) => {
     setTitle(draftData.title);
     setContent(draftData.content);
     setIsDirty(true);
-    setShowDraftRecovery(false);
+    handleDraftRecover(); // Use intelligent recovery handler
     showSuccess('Draft recovered successfully');
-  }, [showSuccess]);
+  }, [handleDraftRecover, showSuccess]);
 
-  // Handle draft discard
+  // Handle draft discard with intelligent system
   const handleDiscardDraft = useCallback(() => {
     clearDraft();
-    setShowDraftRecovery(false);
+    handleDraftDiscard(); // Use intelligent discard handler
     showSuccess('Draft discarded');
-  }, [clearDraft, showSuccess]);
+  }, [clearDraft, handleDraftDiscard, showSuccess]);
 
   // Handle new post draft recovery
   const handleRecoverNewPostDraft = useCallback((draftData: { title: string; content: string; timestamp: number }) => {
@@ -368,11 +560,7 @@ export const EditorPage = () => {
     showSuccess('Draft recovered successfully');
   }, [showSuccess]);
 
-  // Handle new post draft discard
-  const handleDiscardNewPostDraft = useCallback(() => {
-    clearNewPostDraft();
-    showSuccess('Draft discarded');
-  }, [clearNewPostDraft, showSuccess]);
+
 
   // Handle conflict resolution
   const handleConflictResolution = useCallback((resolution: ConflictResolution) => {
@@ -410,6 +598,17 @@ export const EditorPage = () => {
     } catch (error) {
       console.error('Failed to reject suggestion:', error);
       showError('Failed to reject suggestion');
+    }
+  }, [rejectSuggestion, showSuccess, showError]);
+
+  // Handle suggestion deletion
+  const handleDeleteSuggestion = useCallback(async (suggestionId: string) => {
+    try {
+      await rejectSuggestion(suggestionId); // Use the same logic as reject for now
+      showSuccess('Suggestion deleted');
+    } catch (error) {
+      console.error('Failed to delete suggestion:', error);
+      showError('Failed to delete suggestion');
     }
   }, [rejectSuggestion, showSuccess, showError]);
 
@@ -453,9 +652,13 @@ export const EditorPage = () => {
       const timer = setTimeout(() => {
         clearSuggestionsError();
       }, 5000);
+
+      // Register timeout for cleanup
+      componentCleanupManager.registerTimeout(timer, 'EditorPage', 'Clear suggestions error');
+
       return () => clearTimeout(timer);
     }
-  }, [suggestionsError, clearSuggestionsError]);
+  }, [suggestionsError]);
 
   // Workflow validation
   const validateWorkflowAction = (): { isValid: boolean; error?: string } => {
@@ -526,6 +729,8 @@ export const EditorPage = () => {
     setShowFinalizeConfirmation(true);
   };
 
+
+
   // Submit for review (confirmed)
   const handleSubmitReviewConfirmed = async () => {
     if (!post) return;
@@ -545,11 +750,20 @@ export const EditorPage = () => {
         await forceSave();
       }
 
-      await apiService.submitForReview(post.id);
+      // Start the review process with real-time feedback
+      if (!canStartReview) {
+        showError('A review is already in progress');
+        return;
+      }
+
+      // Call the review endpoint and start polling
+      await startReview(post.id);
+
       clearDraft(); // Clear draft after successful submission
-      showSuccess('Post submitted for review successfully. You will receive additional AI suggestions.');
+      showSuccess('Review started! You\'ll receive real-time AI suggestions.');
       setShowSubmitConfirmation(false);
-      navigate('/dashboard');
+
+      // Don't navigate away - stay on the page to show real-time feedback
     } catch (error) {
       console.error('Failed to submit for review:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to submit for review';
@@ -624,10 +838,45 @@ export const EditorPage = () => {
         }}
       />
 
-      <div className="max-w-7xl mx-auto">
+      <EditorErrorBoundary
+        postId={id}
+        title={title}
+        content={content}
+        onError={(error, errorInfo) => {
+          // Report error for debugging
+          ErrorReportingManager.reportEditorError(
+            error,
+            id || null,
+            'EditorPage',
+            Boolean(title.trim() || content.trim()),
+            { errorInfo }
+          );
+
+          // Create backup for critical failures
+          EditorBackupManager.createErrorBackup(
+            id || null,
+            title,
+            content,
+            error,
+            'EditorPage'
+          );
+        }}
+        fallback={(error, actions) => (
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6">
+            <EditorFallbackUI
+              error={error}
+              onRetry={actions.retry}
+              onSaveBackup={actions.saveBackup}
+              postId={id || null}
+              title={title}
+              content={content}
+              componentName="Editor Page"
+            />
+          </div>
+        )}
+      >
+        <div className="max-w-7xl mx-auto">
         <EditorHeader
-          title={title}
-          onTitleChange={handleTitleChange}
           isSaving={isSaving}
           isDirty={isDirty}
           lastSaved={lastSaved}
@@ -637,16 +886,17 @@ export const EditorPage = () => {
 
         {/* Notifications */}
         <div className="px-3 sm:px-4 lg:px-6 xl:px-8">
-          {/* Draft Recovery Notification */}
-          {showDraftRecovery && (() => {
+          {/* Intelligent Draft Recovery Notification */}
+          {shouldShowDraftDialog && (() => {
             const draftData = loadDraft();
             return draftData ? (
               <div className="pt-3 sm:pt-4">
                 <DraftRecoveryNotification
                   draftData={draftData}
+                  isVisible={isDraftDialogVisible}
                   onRecover={handleRecoverDraft}
                   onDiscard={handleDiscardDraft}
-                  onDismiss={() => setShowDraftRecovery(false)}
+                  onDismiss={handleDraftDismiss}
                 />
               </div>
             ) : null;
@@ -673,6 +923,31 @@ export const EditorPage = () => {
                   <button
                     onClick={clearSaveError}
                     className="ml-2 sm:ml-auto text-red-400 hover:text-red-600 flex-shrink-0"
+                  >
+                    <span className="sr-only">Dismiss</span>
+                    ×
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Draft Error Notification */}
+          {draftError && (
+            <div className="pt-3 sm:pt-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 sm:p-4">
+                <div className="flex items-start sm:items-center">
+                  <div className="text-sm text-orange-700 flex-1 min-w-0">
+                    <strong>Draft Storage:</strong> {draftError.message}
+                    {draftError.type === 'quota_exceeded' && (
+                      <div className="mt-1 text-xs">
+                        Try clearing browser data or using a different browser.
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={clearDraftError}
+                    className="ml-2 sm:ml-auto text-orange-400 hover:text-orange-600 flex-shrink-0"
                   >
                     <span className="sr-only">Dismiss</span>
                     ×
@@ -741,6 +1016,18 @@ export const EditorPage = () => {
             {/* Main editor area */}
             <div className="flex-1 min-w-0">
               <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                {/* Title Editor */}
+                <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2">
+                  <TitleEditor
+                    title={title}
+                    onChange={handleTitleChange}
+                    placeholder={isNewPost ? "Enter your title here" : "Enter your title here"}
+                    maxLength={200}
+                    disabled={isSaving}
+                  />
+                </div>
+
+                {/* Content Editor */}
                 <ContentEditor
                   content={content}
                   onChange={handleContentChange}
@@ -748,29 +1035,48 @@ export const EditorPage = () => {
                 />
               </div>
 
-              {/* Suggestion list below editor on mobile and tablet, hidden on desktop */}
+              {/* Content Summary - positioned above suggestions but below editor */}
+              {!isNewPost && (
+                <div className="mt-3 sm:mt-4 xl:hidden">
+                  <ContentSummary
+                    summary={summary}
+                    isLoading={suggestionsLoading}
+                    className=""
+                  />
+                </div>
+              )}
+
+              {/* Suggestion panel below editor on mobile and tablet, hidden on desktop */}
               {hasActiveSuggestions && (
                 <div className="mt-3 sm:mt-4 bg-white shadow-sm rounded-lg p-4 sm:p-6 xl:hidden">
-                  <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-3 sm:mb-4">
-                    AI Suggestions ({suggestions.length})
-                  </h3>
-                  <SuggestionList
+                  <SuggestionsPanel
                     suggestions={suggestions}
                     content={content}
                     onAccept={handleAcceptSuggestion}
                     onReject={handleRejectSuggestion}
+                    onDelete={handleDeleteSuggestion}
+                    isLoading={suggestionsLoading}
                   />
                 </div>
               )}
             </div>
 
             {/* Sidebar with suggestion stats - hidden on mobile/tablet, shown on desktop */}
-            {(hasActiveSuggestions || stats.accepted > 0 || stats.rejected > 0) && (
+            {(hasActiveSuggestions || stats.accepted > 0 || stats.rejected > 0 || (!isNewPost && summary)) && (
               <div className="hidden xl:block w-80 2xl:w-96 space-y-4 flex-shrink-0">
                 <SuggestionStats
                   stats={stats}
                   onUndoClick={canUndo ? handleUndo : undefined}
                 />
+
+                {/* Content Summary - positioned above suggestions in desktop sidebar */}
+                {!isNewPost && (
+                  <ContentSummary
+                    summary={summary}
+                    isLoading={suggestionsLoading}
+                    className=""
+                  />
+                )}
 
                 {suggestionsLoading && (
                   <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -781,17 +1087,16 @@ export const EditorPage = () => {
                   </div>
                 )}
 
-                {/* Desktop suggestion list */}
+                {/* Desktop suggestion panel */}
                 {hasActiveSuggestions && (
                   <div className="bg-white shadow-sm rounded-lg p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      AI Suggestions ({suggestions.length})
-                    </h3>
-                    <SuggestionList
+                    <SuggestionsPanel
                       suggestions={suggestions}
                       content={content}
                       onAccept={handleAcceptSuggestion}
                       onReject={handleRejectSuggestion}
+                      onDelete={handleDeleteSuggestion}
+                      isLoading={suggestionsLoading}
                     />
                   </div>
                 )}
@@ -808,6 +1113,17 @@ export const EditorPage = () => {
           isDirty={isDirty}
           canSubmit={title.trim().length > 0 && content.trim().length > 0}
           post={post}
+          isReviewInProgress={isReviewInProgress}
+          title={title}
+          content={content}
+          hasUnsavedChanges={hasAutoSaveUnsavedChanges}
+          forceSave={forceSave}
+          onPostCreated={(newPostId) => {
+            // Update the post ID when a new post is created
+            if (post) {
+              setPost({ ...post, id: newPostId });
+            }
+          }}
         />
       </div>
 
@@ -829,6 +1145,12 @@ export const EditorPage = () => {
           onDismiss={() => setShowUndoNotification(false)}
         />
       )}
+
+      {/* Review Notifications */}
+      <ReviewNotificationContainer
+        notifications={reviewNotifications}
+        onDismiss={removeReviewNotification}
+      />
 
       {/* Submit for Review Confirmation Modal */}
       <ConfirmationModal
@@ -874,6 +1196,9 @@ export const EditorPage = () => {
         onConfirm={handleNavigationConfirmed}
         onCancel={() => setShowNavigationConfirmation(false)}
       />
+      </EditorErrorBoundary>
     </div>
   );
-};
+});
+
+EditorPage.displayName = 'EditorPage';

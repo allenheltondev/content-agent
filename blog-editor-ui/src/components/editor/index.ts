@@ -1,10 +1,15 @@
 export { EditorHeader } from './EditorHeader';
+export { TitleEditor } from './TitleEditor';
 export { ContentEditor } from './ContentEditor';
 export { ContentEditorWithSuggestions } from './ContentEditorWithSuggestions';
+export { ContentSummary } from './ContentSummary';
 export { SuggestionOverlay } from './SuggestionOverlay';
 export { SuggestionHighlight } from './SuggestionHighlight';
 export { SuggestionPopover } from './SuggestionPopover';
 export { SuggestionInteractionDemo } from './SuggestionInteractionDemo';
+export { SuggestionsPanel } from './SuggestionsPanel';
 export { EditorActions } from './EditorActions';
 export { DraftRecoveryNotification } from './DraftRecoveryNotification';
 export { NewPostRecoveryNotification } from './NewPostRecoveryNotification';
+export { EditorErrorBoundary } from './EditorErrorBoundary';
+export { EditorFallbackUI } from './EditorFallbackUI';

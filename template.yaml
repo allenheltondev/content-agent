@@ -11,6 +11,15 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ""
+  MomentoApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: "Momento API key for generating scoped tokens for real-time notifications"
+  MomentoCacheName:
+    Type: String
+    Default: "docs"
+    Description: "Momento cache name for review notifications"
 
 Metadata:
   esbuild-properties: &esbuild-properties
@@ -46,6 +55,15 @@ Globals:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
       AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
       AllowOrigin: !Sub "'${Origin}'"
+
+Mappings:
+  RegionToEndPoint:
+    us-east-1:
+      URL: https://api.cache.cell-us-east-1-1.prod.a.momentohq.com
+    us-west-2:
+      URL: https://api.cache.cell-4-us-west-2-1.prod.a.momentohq.com
+    eu-west-1:
+      URL: https://api.cache.cell-1-eu-west-1-1.prod.a.momentohq.com
 
 Resources:
   ContentTable:
@@ -278,6 +296,7 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt ContentTable.Arn
             - Effect: Allow
               Action: bedrock:InvokeModel
@@ -315,6 +334,7 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt ContentTable.Arn
             - Effect: Allow
               Action: bedrock:InvokeModel
@@ -323,6 +343,44 @@ Resources:
             - Effect: Allow
               Action: bedrock-agentcore:RetrieveMemoryRecords
               Resource: "*"
+      Environment:
+        Variables:
+          MEMORY_PARAMETER: !Ref AgentMemoryParameter
+          TABLE_NAME: !Ref ContentTable
+
+  ReadabilityAgent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - agents/readability.mjs
+    Properties:
+      Handler: agents/readability.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/agents/memory"
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:CreateEvent
+                - bedrock-agentcore:ListEvents
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ContentTable.Arn
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-lite-v1:0
       Environment:
         Variables:
           MEMORY_PARAMETER: !Ref AgentMemoryParameter
@@ -356,6 +414,7 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt ContentTable.Arn
             - Effect: Allow
               Action: bedrock:InvokeModel
@@ -367,7 +426,44 @@ Resources:
           TABLE_NAME: !Ref ContentTable
           SERPAPI_KEY: !Ref SerpApiKey
 
-  # Blog API Lambda Functions
+  SummaryAgent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - agents/summarizer.mjs
+    Properties:
+      Handler: agents/summarizer.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/agents/memory"
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:CreateEvent
+                - bedrock-agentcore:ListEvents
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+              Resource: !GetAtt ContentTable.Arn
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource:
+                - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}::foundation-model/amazon.nova-pro-v1:0
+      Environment:
+        Variables:
+          MEMORY_PARAMETER: !Ref AgentMemoryParameter
+          TABLE_NAME: !Ref ContentTable
+
   ListPostsFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -427,7 +523,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref BlogApi
-            Path: /posts/{id}
+            Path: /posts/{postId}
             Method: GET
 
   CreatePostFunction:
@@ -479,6 +575,10 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:UpdateItem
               Resource: !GetAtt ContentTable.Arn
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
@@ -488,8 +588,42 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref BlogApi
-            Path: /posts/{id}
+            Path: /posts/{postId}
             Method: PUT
+
+  PostProcessingFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/post-processing.mjs
+    Properties:
+      Handler: api/post-processing.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+                - dynamodb:PutItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+      Events:
+        PostUpdated:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - content-agent
+              detail-type:
+                - Post Updated
 
   DeletePostFunction:
     Type: AWS::Serverless::Function
@@ -510,17 +644,54 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:DeleteItem
               Resource: !GetAtt ContentTable.Arn
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
       Events:
         Api:
           Type: Api
           Properties:
             RestApiId: !Ref BlogApi
-            Path: /posts/{id}
+            Path: /posts/{postId}
             Method: DELETE
+
+  DeletePostAsyncFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/delete-post-async.mjs
+    Properties:
+      Handler: api/delete-post-async.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:BatchWriteItem
+                - dynamodb:DeleteItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+      Events:
+        EB:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - content-agent
+              detail-type:
+                - Delete Post
 
   GetSuggestionsFunction:
     Type: AWS::Serverless::Function
@@ -550,19 +721,60 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref BlogApi
-            Path: /posts/{id}/suggestions
+            Path: /posts/{postId}/suggestions
             Method: GET
 
-  DeleteSuggestionFunction:
+  StartReviewFunction:
     Type: AWS::Serverless::Function
     Metadata:
       BuildMethod: esbuild
       BuildProperties:
         <<: *esbuild-properties
         EntryPoints:
-          - api/delete-suggestion.mjs
+          - api/start-review.mjs
     Properties:
-      Handler: api/delete-suggestion.handler
+      Handler: api/start-review.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !GetAtt ContentTable.Arn
+            - Effect: Allow
+              Action:
+                - events:PutEvents
+              Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:event-bus/default
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          ORIGIN: !Ref Origin
+          MOMENTO_AUTH_TOKEN: !Ref MomentoApiKey
+          MOMENTO_CACHE_NAME: !Ref MomentoCacheName
+          SUBSCRIBE_BASE_URL:
+            Fn::FindInMap:
+              - RegionToEndPoint
+              - !Ref AWS::Region
+              - URL
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /posts/{postId}/reviews
+            Method: POST
+
+  UpdateSuggestionStatusFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/update-suggestion-status.mjs
+    Properties:
+      Handler: api/update-suggestion-status.handler
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: 2012-10-17
@@ -571,6 +783,8 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:DeleteItem
+                - dynamodb:UpdateItem
+                - dynamodb:PutItem
               Resource: !GetAtt ContentTable.Arn
       Environment:
         Variables:
@@ -581,8 +795,8 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref BlogApi
-            Path: /suggestions/{id}
-            Method: DELETE
+            Path: /posts/{postId}/suggestions/{suggestionId}/statuses
+            Method: POST
 
   GetProfileFunction:
     Type: AWS::Serverless::Function
@@ -671,6 +885,47 @@ Resources:
             Path: /profile
             Method: PUT
 
+  GetStatsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/get-stats.mjs
+    Properties:
+      Handler: api/get-stats.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                - !GetAtt ContentTable.Arn
+                - !Sub "${ContentTable.Arn}/index/GSI1"
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/agents/memory"
+            - Effect: Allow
+              Action:
+                - bedrock-agentcore:RetrieveMemoryRecords
+              Resource: "*"
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+          MEMORY_PARAMETER: !Ref AgentMemoryParameter
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /stats
+            Method: GET
+
   BlogApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -716,7 +971,7 @@ Resources:
                 Action: lambda:InvokeFunction
                 Resource: !GetAtt BlogApiAuthorizer.Arn
 
-  ScheduleSocialStateMachine:
+  AnalyzeContentStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
       Type: STANDARD
@@ -726,6 +981,8 @@ Resources:
         FactCheckAgent: !GetAtt FactCheckAgent.Arn
         BrandAuditAgent: !GetAtt BrandAuditAgent.Arn
         LLMAuditAgent: !GetAtt LLMAuditAgent.Arn
+        ReadabilityAgent: !GetAtt ReadabilityAgent.Arn
+        SummarizeAgent: !GetAtt SummaryAgent.Arn
       Policies:
         - Version: 2012-10-17
           Statement:
@@ -735,6 +992,8 @@ Resources:
                 - !GetAtt FactCheckAgent.Arn
                 - !GetAtt BrandAuditAgent.Arn
                 - !GetAtt LLMAuditAgent.Arn
+                - !GetAtt ReadabilityAgent.Arn
+                - !GetAtt SummaryAgent.Arn
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
@@ -752,6 +1011,72 @@ Resources:
                 - content-agent
               detail-type:
                 - Start Content Analysis
+
+  ApiConnection:
+    Type: AWS::Events::Connection
+    Properties:
+      AuthorizationType: API_KEY
+      AuthParameters:
+        ApiKeyAuthParameters:
+          ApiKeyName: Authorization
+          ApiKeyValue: !Ref MomentoApiKey
+
+  ApiDestinationsTargetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /service-role/
+      Policies:
+        - PolicyName: destinationinvoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - events:InvokeApiDestination
+                Resource:
+                  - !GetAtt MomentoApiTopicsPost.Arn
+
+  MomentoApiTopicsPost:
+    Type: AWS::Events::ApiDestination
+    Properties:
+      ConnectionArn: !GetAtt ApiConnection.Arn
+      HttpMethod: POST
+      InvocationEndpoint:
+        Fn::Sub:
+          - ${RegionEndpoint}/topics/*/*
+          - RegionEndpoint:
+              Fn::FindInMap:
+                - RegionToEndPoint
+                - !Ref AWS::Region
+                - URL
+      InvocationRateLimitPerSecond: 300
+
+  MomentoApiTopicsPostRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        detail-type:
+          - Content Analysis Completed
+      State: ENABLED
+      Targets:
+        - Id: topicPublish-rule
+          Arn: !GetAtt MomentoApiTopicsPost.Arn
+          RoleArn: !GetAtt ApiDestinationsTargetRole.Arn
+          InputTransformer:
+            InputPathsMap:
+              message: $.detail.success
+            InputTemplate: '"<message>"'
+          HttpParameters:
+            PathParameterValues:
+              - $.detail.cacheName
+              - $.detail.topicName
 
 Outputs:
   UserPoolId:
