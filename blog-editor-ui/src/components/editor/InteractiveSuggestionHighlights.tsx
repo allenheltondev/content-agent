@@ -439,9 +439,9 @@ export const InteractiveSuggestionHighlights = ({
               <span
                 key={`${highlight.id}-${index}`}
                 className={`
-                  suggestion-highlight relative inline-block transition-all duration-200 ease-in-out
-                  border-b-2 border-dashed px-1 py-0.5
-                  ${isActive ? 'shadow-md z-20 scale-105' : 'hover:scale-102'}
+                  suggestion-highlight relative inline transition-colors duration-200 ease-in-out
+                  border-b-2 border-dashed
+                  ${isActive ? 'shadow-md z-20' : ''}
                   ${isHovered && !isActive ? 'shadow-sm z-10' : ''}
                   ${hasOverlapping ? 'border-double' : ''}
                   focus:outline-none focus:ring-2 focus:ring-opacity-50
@@ -454,7 +454,10 @@ export const InteractiveSuggestionHighlights = ({
                   cursor: currentStyle.cursor,
                   transition: currentStyle.transition,
                   zIndex: isActive ? 20 : isHovered ? 10 : 5,
-                  '--focus-ring-color': currentStyle.borderColor
+                  '--focus-ring-color': currentStyle.borderColor,
+                  // Ensure background wraps each line consistently without affecting layout width
+                  boxDecorationBreak: 'clone',
+                  WebkitBoxDecorationBreak: 'clone' as any
                 } as React.CSSProperties}
                 onClick={(e) => highlight.onClick(e)}
                 onMouseEnter={() => handleHighlightHover(highlight.id)}

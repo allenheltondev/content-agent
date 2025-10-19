@@ -381,15 +381,17 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
               <span
                 key={`${item.id}-${index}`}
                 className={`
-                  suggestion-highlight relative inline-block transition-all duration-200 ease-in-out
-                  border-b-2 border-dashed px-1 py-0.5 cursor-pointer
-                  ${item.isActive ? 'shadow-md z-20 scale-105' : 'hover:scale-102 hover:shadow-sm z-10'}
+                  suggestion-highlight relative inline transition-colors duration-200 ease-in-out
+                  border-b-2 border-dashed cursor-pointer
+                  ${item.isActive ? 'shadow-md z-20' : 'hover:shadow-sm z-10'}
                   focus:outline-none focus:ring-2 focus:ring-opacity-50
                 `}
                 style={{
                   backgroundColor,
                   borderColor: backgroundColor.replace('0.15)', '0.6)').replace('0.35)', '0.8)'),
-                  zIndex: item.isActive ? 20 : 5
+                  zIndex: item.isActive ? 20 : 5,
+                  boxDecorationBreak: 'clone',
+                  WebkitBoxDecorationBreak: 'clone' as any
                 }}
                 onClick={(e) => handleHighlightClick(item.suggestionId, e)}
                 tabIndex={0}

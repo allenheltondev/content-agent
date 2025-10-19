@@ -162,6 +162,14 @@ Resources:
       AccessTokenValidity: 1
       IdTokenValidity: 1
       RefreshTokenValidity: 30
+      CallbackURLs:
+        - !Ref Origin
+        - "http://localhost:5173"
+      LogoutURLs:
+        - !Ref Origin
+        - "http://localhost:5173"
+      SupportedIdentityProviders:
+        - COGNITO
 
   CreateAgentMemory:
     Type: AWS::CloudFormation::CustomResource
@@ -487,7 +495,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
       Events:
         Api:
           Type: Api
@@ -517,7 +524,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
       Events:
         Api:
           Type: Api
@@ -547,7 +553,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
       Events:
         Api:
           Type: Api
@@ -582,7 +587,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
       Events:
         Api:
           Type: Api
@@ -682,7 +686,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
       Events:
         EB:
           Type: EventBridgeRule
@@ -715,7 +718,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
       Events:
         Api:
           Type: Api
@@ -749,7 +751,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
           MOMENTO_AUTH_TOKEN: !Ref MomentoApiKey
           MOMENTO_CACHE_NAME: !Ref MomentoCacheName
           SUBSCRIBE_BASE_URL:
@@ -789,7 +790,6 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref ContentTable
-          ORIGIN: !Ref Origin
       Events:
         Api:
           Type: Api

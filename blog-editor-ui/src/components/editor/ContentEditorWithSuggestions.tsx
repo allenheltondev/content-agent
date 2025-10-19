@@ -137,7 +137,8 @@ export const ContentEditorWithSuggestions = ({
                   paddingBottom: '24px',
                   fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
                   fontSize: '14px',
-                  lineHeight: '1.6',
+                  // Match Tailwind's leading-relaxed exactly to keep wrapping in sync
+                  lineHeight: '1.625',
                   whiteSpace: 'pre-wrap',
                   wordWrap: 'break-word'
                 }}
@@ -174,7 +175,7 @@ export const ContentEditorWithSuggestions = ({
                   paddingBottom: '24px',
                   fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
                   fontSize: '14px',
-                  lineHeight: '1.6',
+                  lineHeight: '1.625',
                   whiteSpace: 'pre-wrap',
                   wordWrap: 'break-word'
                 }}

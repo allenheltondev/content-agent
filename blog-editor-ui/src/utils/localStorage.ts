@@ -49,27 +49,7 @@ function isSensitiveKey(key: string): boolean {
   return SENSITIVE_PATTERNS.some(pattern => pattern.test(key));
 }
 
-/**
- * Get current app version (fallback to timestamp if not available)
- */
-function getAppVersion(): string {
-  // In a real app, this would come from package.json or build process
-  return import.meta.env.VITE_APP_VERSION || Date.now().toString();
-}
-
-/**
- * Safe JSON parse with error handling
- */
-function safeJsonParse<T>(value: string | null, fallback: T): T {
-  if (!value) return fallback;
-
-  try {
-    return JSON.parse(value);
-  } catch (error) {
-    console.warn('Failed to parse JSON from localStorage:', error);
-    return fallback;
-  }
-}
+// Removed unused utility functions since localStorage operations are disabled
 
 /**
  * Safe localStorage operations with error handling
@@ -78,7 +58,7 @@ export class LocalStorageManager {
   /**
    * Save profile setup draft data
    */
-  static saveProfileSetupDraft(data: Partial<ProfileSetupDraft>): void {
+  static saveProfileSetupDraft(_data: Partial<ProfileSetupDraft>): void {
     // Disabled: no-op for hackathon to avoid local draft persistence
     return;
   }
@@ -102,7 +82,7 @@ export class LocalStorageManager {
   /**
    * Check if profile setup draft exists and is recent
    */
-  static hasRecentProfileSetupDraft(maxAgeMs: number = 24 * 60 * 60 * 1000): boolean {
+  static hasRecentProfileSetupDraft(_maxAgeMs: number = 24 * 60 * 60 * 1000): boolean {
     // Disabled: always false
     return false;
   }
@@ -110,7 +90,7 @@ export class LocalStorageManager {
   /**
    * Save new post draft data
    */
-  static saveNewPostDraft(data: Partial<NewPostDraft>): void {
+  static saveNewPostDraft(_data: Partial<NewPostDraft>): void {
     // Disabled: no-op
     return;
   }
@@ -134,7 +114,7 @@ export class LocalStorageManager {
   /**
    * Check if new post draft exists and is recent
    */
-  static hasRecentNewPostDraft(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): boolean {
+  static hasRecentNewPostDraft(_maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): boolean {
     // Disabled: always false
     return false;
   }
@@ -173,7 +153,7 @@ export class LocalStorageManager {
   /**
    * Clean up old draft data based on age
    */
-  static cleanupOldDrafts(maxAgeMs: number = 30 * 24 * 60 * 60 * 1000): void {
+  static cleanupOldDrafts(_maxAgeMs: number = 30 * 24 * 60 * 60 * 1000): void {
     // Disabled: no-op
     return;
   }

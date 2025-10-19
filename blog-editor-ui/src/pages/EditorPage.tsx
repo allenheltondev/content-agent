@@ -17,15 +17,9 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
 import { AppHeader } from '../components/common';
 import { ConflictResolutionModal } from '../components/editor/ConflictResolutionModal';
- 
+
 import { useAsyncReview } from '../hooks/useAsyncReview';
-import {
-  detectConflict,
-  createConflictData,
-  applyResolution,
-  type ConflictData,
-  type ConflictResolution
-} from '../utils/conflictResolution';
+import { applyResolution, type ConflictData, type ConflictResolution } from '../utils/conflictResolution';
 import { EditorErrorBoundary } from '../components/editor/EditorErrorBoundary';
 import { EditorFallbackUI } from '../components/editor/EditorFallbackUI';
 import { ErrorReportingManager } from '../utils/errorReporting';
@@ -104,7 +98,7 @@ export const EditorPage = memo(() => {
   const [, setInitialLoadTimestamp] = useState<number>(0);
   const [showUndoNotification, setShowUndoNotification] = useState(false);
   const [isCreatingPost, setIsCreatingPost] = useState(false);
-  const [expandedSuggestion, setExpandedSuggestion] = useState<string | undefined>(undefined);
+  const [, setExpandedSuggestion] = useState<string | undefined>(undefined);
 
   // Workflow confirmation modals
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
@@ -143,7 +137,7 @@ export const EditorPage = memo(() => {
 
   // Draft persistence removed
 
-  
+
 
   // Handle content changes - memoized to prevent unnecessary re-renders
   const handleContentChange = useCallback((newContent: string) => {
@@ -172,18 +166,13 @@ export const EditorPage = memo(() => {
 
   const {
     suggestions,
-    summary,
-    isLoading: suggestionsLoading,
     error: suggestionsError,
     undoHistory,
     loadSuggestions,
     acceptSuggestion,
     rejectSuggestion,
-    deleteSuggestion,
     undoLastAcceptance,
     clearError: clearSuggestionsError,
-    stats,
-    canUndo,
     hasActiveSuggestions
   } = useSuggestionManager(content, handleContentChange, suggestionConfig);
 
@@ -403,15 +392,7 @@ export const EditorPage = memo(() => {
     }
   }, [rejectSuggestion]);
 
-  // Handle suggestion deletion
-  const handleDeleteSuggestion = useCallback(async (suggestionId: string) => {
-    try {
-      await deleteSuggestion(suggestionId);
-    } catch (error) {
-      console.error('Failed to delete suggestion:', error);
-      // Error handling is now done by the suggestion manager hook
-    }
-  }, [deleteSuggestion]);
+  // Suggestion deletion handled within suggestion manager when needed
 
   // Handle undo
   const handleUndo = useCallback(() => {
@@ -452,6 +433,20 @@ export const EditorPage = memo(() => {
       return () => clearTimeout(timer);
     }
   }, [suggestionsError]);
+
+  // Handle conflict resolution from modal
+  const handleConflictResolution = useCallback((resolution: ConflictResolution) => {
+    if (!conflictData) {
+      return;
+    }
+
+    const result = applyResolution(conflictData, resolution);
+    setTitle(result.title);
+    setContent(result.content);
+    setConflictData(null);
+    setIsDirty(true);
+    showSuccess('Conflict resolved. Please save your changes.');
+  }, [conflictData, showSuccess]);
 
   // Workflow validation
   const validateWorkflowAction = (): { isValid: boolean; error?: string } => {
@@ -683,13 +678,13 @@ export const EditorPage = memo(() => {
         />
 
         {/* Notifications removed */}
-        
+
 
         <div className="px-3 sm:px-4 lg:px-6 xl:px-8 py-3 sm:py-4">
-          
+
 
           {/* Content Summary - positioned above main content area */}
-          
+
 
           <MainEditorLayout
             hasSuggestions={false}
