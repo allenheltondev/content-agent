@@ -22,7 +22,6 @@ export class AuthService {
         },
       };
     } catch (error) {
-      console.log('No authenticated user found:', error);
       return null;
     }
   }

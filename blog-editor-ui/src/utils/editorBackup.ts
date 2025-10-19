@@ -60,7 +60,6 @@ export class EditorBackupManager {
       const key = this.getBackupKey(source, postId, backupId);
       localStorage.setItem(key, JSON.stringify(backup));
 
-      console.log(`Editor backup created: ${key}`);
       return backupId;
     } catch (error) {
       console.warn('Failed to create editor backup:', error);
@@ -201,7 +200,6 @@ export class EditorBackupManager {
           const storedBackup: EditorBackup = JSON.parse(stored);
           if (storedBackup.id === backupId) {
             localStorage.removeItem(key);
-            console.log(`Backup deleted: ${key}`);
             return true;
           }
         } catch (parseError) {
@@ -253,9 +251,7 @@ export class EditorBackupManager {
         cleaned++;
       });
 
-      if (cleaned > 0) {
-        console.log(`Cleaned up ${cleaned} old editor backups`);
-      }
+
 
       return cleaned;
     } catch (error) {

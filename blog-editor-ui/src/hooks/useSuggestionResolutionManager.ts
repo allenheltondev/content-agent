@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import type { Suggestion } from '../types';
-import { usePerformanceMonitor } from './usePerformanceMonitor';
+
 
 /**
  * Suggestion resolution action
@@ -137,15 +137,7 @@ export function useSuggestionResolutionManager(
     ...config
   }), [config]);
 
-  // Performance monitoring
-  const { measureAsyncFunction } = usePerformanceMonitor({
-    enabled: finalConfig.enablePerformanceMonitoring,
-    thresholds: {
-      resolution: 200,
-      batch: 1000,
-      retry: 500
-    }
-  });
+  // Performance monitoring removed
 
   // Resolution state
   const [state, setState] = useState<OptimisticResolutionState>({
@@ -167,7 +159,7 @@ export function useSuggestionResolutionManager(
   });
 
   // Batch processing timer
-  const batchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const processingBatchRef = useRef<boolean>(false);
 
   /**
@@ -270,7 +262,6 @@ export function useSuggestionResolutionManager(
    * Process a single resolution action
    */
   const processResolutionAction = useCallback(async (action: SuggestionResolutionAction): Promise<SuggestionResolutionAction> => {
-    return measureAsyncFunction('resolution', async () => {
       const startTime = Date.now();
 
       try {
@@ -340,8 +331,7 @@ export function useSuggestionResolutionManager(
 
         return failedAction;
       }
-    });
-  }, [measureAsyncFunction, onAcceptSuggestion, onRejectSuggestion, confirmOptimisticUpdate, revertOptimisticUpdate, finalConfig]);
+  }, [onAcceptSuggestion, onRejectSuggestion, confirmOptimisticUpdate, revertOptimisticUpdate, finalConfig]);
 
   /**
    * Process a batch of resolution actions

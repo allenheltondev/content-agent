@@ -3,14 +3,15 @@ import { PostList, StatsOverview } from '../components/dashboard';
 import { AsyncErrorBoundary, InfoBox, AppHeader } from '../components/common';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useInfoBoxManager } from '../hooks/useInfoBoxManager';
-import { extractFirstName } from '../utils';
 
 export const DashboardPage = () => {
   const { user } = useAuth();
   const { isDismissed, dismissInfoBox } = useInfoBoxManager();
 
   // Extract first name for personalized welcome message
-  const firstName = extractFirstName(user?.attributes.name);
+  const firstName = user?.attributes.name?.trim()
+    ? user.attributes.name.trim().split(/\s+/)[0] || ''
+    : '';
   const welcomeMessage = firstName
     ? `Welcome back, ${firstName}!`
     : 'Welcome back!';

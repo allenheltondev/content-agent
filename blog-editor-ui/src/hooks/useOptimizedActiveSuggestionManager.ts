@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useActiveSuggestionManager, type ActiveSuggestionManagerConfig } from './useActiveSuggestionManager';
 import { useSuggestionCache } from './useSuggestionCache';
-import { usePerformanceMonitor } from './usePerformanceMonitor';
+
 
 /**
  * Configuration for optimized active suggestion manager
@@ -105,15 +105,7 @@ export function useOptimizedActiveSuggestionManager(config: OptimizedActiveSugge
     ...config
   }), [config]);
 
-  // Performance monitoring
-  const { measureFunction, measureAsyncFunction, getMetrics } = usePerformanceMonitor({
-    enabled: finalConfig.enableOptimizations,
-    thresholds: {
-      navigation: 50,
-      resolution: 100,
-      stateUpdate: 20
-    }
-  });
+  // Performance monitoring removed
 
   // Caching for expensive operations
   const {
@@ -130,8 +122,8 @@ export function useOptimizedActiveSuggestionManager(config: OptimizedActiveSugge
 
   // Batched updates state
   const batchedUpdatesRef = useRef<BatchedUpdate[]>([]);
-  const batchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const memoryOptimizationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const memoryOptimizationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Performance metrics
   const metricsRef = useRef<OptimizedManagerMetrics>({
@@ -167,17 +159,12 @@ export function useOptimizedActiveSuggestionManager(config: OptimizedActiveSugge
       return config.suggestions || [];
     }
 
-    return measureFunction('stateUpdate', () => {
-      const suggestions = config.suggestions || [];
-
-      if (finalConfig.enableLazyLoading && suggestions.length > finalConfig.lazyLoadingThreshold) {
-        // Return only loaded suggestions for performance
-        return suggestions.slice(0, loadedSuggestionCount);
-      }
-
-      return suggestions;
-    });
-  }, [config.suggestions, finalConfig, loadedSuggestionCount, measureFunction]);
+    const suggestions = config.suggestions || [];
+    if (finalConfig.enableLazyLoading && suggestions.length > finalConfig.lazyLoadingThreshold) {
+      return suggestions.slice(0, loadedSuggestionCount);
+    }
+    return suggestions;
+  }, [config.suggestions, finalConfig, loadedSuggestionCount]);
 
   // Initialize the base active suggestion manager with processed suggestions
   const baseManager = useActiveSuggestionManager({
@@ -190,54 +177,25 @@ export function useOptimizedActiveSuggestionManager(config: OptimizedActiveSugge
     if (!finalConfig.enableOptimizations) {
       return baseManager.navigateNext();
     }
-
-    return measureFunction('navigation', () => {
-      const result = baseManager.navigateNext();
-
-      // Update performance metrics
-      const perfMetrics = getMetrics();
-      if (perfMetrics.navigation) {
-        metricsRef.current.navigationPerformance = {
-          averageTime: perfMetrics.navigation.averageDuration,
-          maxTime: perfMetrics.navigation.maxDuration,
-          totalNavigations: perfMetrics.navigation.count
-        };
-      }
-
-      return result;
-    });
-  }, [finalConfig.enableOptimizations, baseManager.navigateNext, measureFunction, getMetrics]);
+    // Direct call without performance measurement
+    return baseManager.navigateNext();
+  }, [finalConfig.enableOptimizations, baseManager.navigateNext]);
 
   const optimizedNavigatePrevious = useCallback(() => {
     if (!finalConfig.enableOptimizations) {
       return baseManager.navigatePrevious();
     }
-
-    return measureFunction('navigation', () => {
-      const result = baseManager.navigatePrevious();
-
-      // Update performance metrics
-      const perfMetrics = getMetrics();
-      if (perfMetrics.navigation) {
-        metricsRef.current.navigationPerformance = {
-          averageTime: perfMetrics.navigation.averageDuration,
-          maxTime: perfMetrics.navigation.maxDuration,
-          totalNavigations: perfMetrics.navigation.count
-        };
-      }
-
-      return result;
-    });
-  }, [finalConfig.enableOptimizations, baseManager.navigatePrevious, measureFunction, getMetrics]);
+    // Direct call without performance measurement
+    return baseManager.navigatePrevious();
+  }, [finalConfig.enableOptimizations, baseManager.navigatePrevious]);
 
   // Optimized suggestion resolution with batching
   const optimizedResolveSuggestion = useCallback(async (suggestionId: string, autoAdvance?: boolean) => {
     if (!finalConfig.enableOptimizations) {
       return baseManager.resolveSuggestion(suggestionId, autoAdvance);
     }
-
-    return measureAsyncFunction('resolution', async () => {
-      if (finalConfig.enableBatchedUpdates) {
+    // Direct processing without performance measurement
+    if (finalConfig.enableBatchedUpdates) {
         // Add to batch
         batchedUpdatesRef.current.push({
           type: 'resolution',
@@ -251,21 +209,10 @@ export function useOptimizedActiveSuggestionManager(config: OptimizedActiveSugge
             processBatchedUpdates();
           }, finalConfig.batchUpdateDelay);
         }
-      } else {
+    } else {
         baseManager.resolveSuggestion(suggestionId, autoAdvance);
-      }
-
-      // Update performance metrics
-      const perfMetrics = getMetrics();
-      if (perfMetrics.resolution) {
-        metricsRef.current.resolutionPerformance = {
-          averageTime: perfMetrics.resolution.averageDuration,
-          maxTime: perfMetrics.resolution.maxDuration,
-          totalResolutions: perfMetrics.resolution.count
-        };
-      }
-    });
-  }, [finalConfig, baseManager.resolveSuggestion, measureAsyncFunction, getMetrics]);
+    }
+  }, [finalConfig, baseManager.resolveSuggestion]);
 
   // Process batched updates
   const processBatchedUpdates = useCallback(() => {

@@ -1,7 +1,6 @@
 import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import type { Suggestion, SuggestionType } from '../../types';
 import { useSuggestionCache } from '../../hooks/useSuggestionCache';
-import { usePerformanceMonitor } from '../../hooks/usePerformanceMonitor';
 
 /**
  * Configuration for virtualized highlighting
@@ -101,25 +100,15 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
   onHighlightClick,
   className = '',
   config = {},
-  enableScrollToActive: _enableScrollToActive = true
+  // enableScrollToActive is unused here; keeping in props for API compatibility
 }) => {
   const finalConfig = useMemo(() => ({
     ...DEFAULT_CONFIG,
     ...config
   }), [config]);
 
-  // Performance monitoring
-  const { measureFunction, getMetrics } = usePerformanceMonitor({
-    enabled: true,
-    thresholds: {
-      highlighting: 50,
-      virtualization: 100,
-      rendering: 30
-    }
-  });
-
   // Caching for expensive computations
-  const { cacheSuggestionData, /* cacheHighlightBoundaries */ getStats } = useSuggestionCache({
+  const { cacheSuggestionData /* cacheHighlightBoundaries */ } = useSuggestionCache({
     maxEntries: 100,
     ttl: 5 * 60 * 1000, // 5 minutes
     enableLRU: true
@@ -132,7 +121,7 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
   const intersectionObserverRef = useRef<IntersectionObserver | null>(null);
 
   // Debounced update state
-  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check if virtualization should be enabled
   const shouldVirtualize = useMemo(() => {
@@ -141,7 +130,6 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
 
   // Process suggestions into virtualized items with caching
   const virtualizedItems = useMemo(() => {
-    return measureFunction('highlighting', () => {
       if (!suggestions.length || !content) {
         return [];
       }
@@ -185,8 +173,7 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
 
       // Sort by priority (highest first)
       return items.sort((a, b) => b.priority - a.priority);
-    });
-  }, [suggestions, content, activeSuggestionId, cacheSuggestionData, measureFunction]);
+  }, [suggestions, content, activeSuggestionId, cacheSuggestionData]);
 
   // Get items to render based on virtualization
   const itemsToRender = useMemo(() => {
@@ -262,16 +249,13 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
 
   // Handle highlight click with performance measurement
   const handleHighlightClick = useCallback((suggestionId: string, event?: React.MouseEvent) => {
-    measureFunction('interaction', () => {
-      event?.preventDefault();
-      event?.stopPropagation();
-      onHighlightClick(suggestionId);
-    });
-  }, [onHighlightClick, measureFunction]);
+    event?.preventDefault();
+    event?.stopPropagation();
+    onHighlightClick(suggestionId);
+  }, [onHighlightClick]);
 
   // Create text segments for rendering with caching
   const textSegments = useMemo(() => {
-    return measureFunction('rendering', () => {
       if (!itemsToRender.length) {
         return [{
           text: content,
@@ -335,33 +319,9 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
       }
 
       return segments;
-    });
-  }, [itemsToRender, content, measureFunction]);
+  }, [itemsToRender, content]);
 
-  // Log performance metrics in development
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      const interval = setInterval(() => {
-        const perfMetrics = getMetrics();
-        const cacheStats = getStats();
-
-        if (perfMetrics.highlighting?.count > 0) {
-          console.log('Virtualized Highlights Performance:', {
-            performance: perfMetrics,
-            cache: cacheStats,
-            virtualization: {
-              enabled: shouldVirtualize,
-              totalItems: virtualizedItems.length,
-              renderedItems: itemsToRender.length,
-              visibleItems: visibleItems.size
-            }
-          });
-        }
-      }, 15000); // Log every 15 seconds
-
-      return () => clearInterval(interval);
-    }
-  }, [getMetrics, getStats, shouldVirtualize, virtualizedItems.length, itemsToRender.length, visibleItems.size]);
+  useEffect(() => { return; }, []);
 
   return (
     <div
@@ -431,12 +391,7 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
       </div>
 
       {/* Performance indicator for development */}
-      {process.env.NODE_ENV === 'development' && shouldVirtualize && (
-        <div className="fixed bottom-4 left-4 bg-black bg-opacity-75 text-white text-xs p-2 rounded z-50">
-          <div>Virtualized: {itemsToRender.length}/{virtualizedItems.length} items</div>
-          <div>Visible: {visibleItems.size} items</div>
-        </div>
-      )}
+      {/* Perf indicator removed for simplicity */}
     </div>
   );
 };

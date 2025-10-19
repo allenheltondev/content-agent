@@ -65,7 +65,7 @@ const DEFAULT_CONFIG: Required<ScrollToActiveConfig> = {
  */
 export function useScrollToActive(config: ScrollToActiveConfig = {}) {
   const finalConfig = { ...DEFAULT_CONFIG, ...config };
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Check if an element is currently visible in the viewport or container
@@ -107,7 +107,6 @@ export function useScrollToActive(config: ScrollToActiveConfig = {}) {
       try {
         // Check if element is already visible
         if (isElementVisible(element)) {
-          console.log('Element already visible, skipping scroll');
           return;
         }
 
@@ -133,8 +132,6 @@ export function useScrollToActive(config: ScrollToActiveConfig = {}) {
             behavior: finalConfig.behavior
           });
         }
-
-        console.log('Scrolled to active suggestion element');
       } catch (error) {
         console.error('Failed to scroll to element:', error);
 
@@ -288,7 +285,6 @@ export function useSuggestionScrollToActive(config: ScrollToActiveConfig = {}) {
 
     // Check if already visible to avoid unnecessary scrolling
     if (isSuggestionVisible(suggestionId)) {
-      console.log('Active suggestion already visible, skipping scroll');
       return true;
     }
 

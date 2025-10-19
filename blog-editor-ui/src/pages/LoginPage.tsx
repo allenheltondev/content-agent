@@ -135,8 +135,6 @@ export const LoginPage = () => {
       // Switch to previous mode
       setMode(previousEntry.mode);
       setError(null);
-
-      console.log('Navigated back to:', previousEntry.mode, 'with preserved data:', previousEntry.preservedData);
     }
   };
 
@@ -160,7 +158,6 @@ export const LoginPage = () => {
 
   // Enhanced tracking of mode and registration step changes
   useEffect(() => {
-    console.log('Mode changed to:', mode, 'registrationStep:', registrationStep);
   }, [mode, registrationStep]);
 
   // Enhanced sync with AuthContext flow states and email maintenance
@@ -172,19 +169,14 @@ export const LoginPage = () => {
         ...prev,
         email: pendingEmail
       }));
-
-      console.log('Email synchronized from AuthContext:', pendingEmail);
     }
 
     // Enhanced registration step synchronization with AuthContext flow state
     if (authFlowState === 'confirming' && registrationStep === 'initial') {
-      console.log('Syncing registration step to pending-confirmation');
       setRegistrationStep('pending-confirmation');
     } else if (authFlowState === 'authenticated' && registrationStep === 'pending-confirmation') {
-      console.log('Syncing registration step to confirmed');
       setRegistrationStep('confirmed');
     } else if (authFlowState === 'idle' && registrationStep !== 'initial') {
-      console.log('Resetting registration step to initial');
       setRegistrationStep('initial');
     }
   }, [pendingEmail, authFlowState, registrationStep]);
@@ -202,8 +194,6 @@ export const LoginPage = () => {
   // Cleanup when registration is fully complete (requirement 5.1)
   useEffect(() => {
     if (isAuthenticated && authFlowState === 'authenticated' && registrationStep === 'confirmed') {
-      console.log('Registration flow complete, performing final cleanup');
-
       // Delay cleanup to allow for smooth transition
       const cleanupTimer = setTimeout(() => {
         cleanupSensitiveData([], true);
@@ -270,21 +260,12 @@ export const LoginPage = () => {
                           registrationStep !== 'pending-confirmation';
 
     if (shouldRedirect) {
-      console.log('Redirecting to dashboard - user is fully authenticated');
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, authFlowState, navigate, mode, registrationStep]);
 
   // Enhanced mode switching logic with form data persistence and navigation tracking
   const switchMode = useCallback((newMode: 'login' | 'register' | 'confirm', preserveProgress = true) => {
-    console.log('switchMode called:', {
-      from: mode,
-      to: newMode,
-      authFlowState,
-      registrationStep,
-      pendingEmail,
-      preserveProgress
-    });
 
     // Persist non-sensitive data before mode switch (requirement 1.4)
     if (preserveProgress) {
@@ -348,7 +329,6 @@ export const LoginPage = () => {
           password: '', // Clear password for security
           name: persistedFormData.name || prev.name // Maintain name for context
         }));
-        console.log('Email maintained during transition to confirm mode:', emailToMaintain);
       }
 
       // Set registration step to pending confirmation (requirement 1.1)
@@ -359,7 +339,6 @@ export const LoginPage = () => {
   // Auto-switch to confirmation mode when AuthContext indicates confirmation is needed
   useEffect(() => {
     if (authFlowState === 'confirming' && mode !== 'confirm' && pendingEmail) {
-      console.log('Auto-switching to confirm mode due to AuthContext state');
       switchMode('confirm');
     }
   }, [authFlowState, mode, pendingEmail, switchMode]);
@@ -399,7 +378,6 @@ export const LoginPage = () => {
           setResendFeedbackMessage(result.message + attemptsMsg);
         }
 
-        console.log('Resend successful:', result);
       } else {
         // Handle resend failure with specific error message
         setError(result.message);
@@ -582,12 +560,8 @@ export const LoginPage = () => {
     setShowRetryOption(false);
 
     try {
-      console.log('Starting registration process...');
-
       // Use the enhanced return type from register method
       const registrationResult = await register(formData.email, formData.password, formData.name);
-
-      console.log('Registration API call successful:', registrationResult);
 
       // Clear retry state on success
       setLastFailedOperation(null);
@@ -595,7 +569,6 @@ export const LoginPage = () => {
       // Enhanced handling of registration result with proper state transitions
       if (!registrationResult.isSignUpComplete) {
         // Registration successful but requires email confirmation
-        console.log('Registration requires confirmation, transitioning to confirmation flow');
 
         // Update registration step to indicate confirmation is pending
         setRegistrationStep('pending-confirmation');
@@ -607,10 +580,8 @@ export const LoginPage = () => {
         setError('Registration successful! Please check your email for a confirmation code.');
 
         // Email is automatically maintained through AuthContext pendingEmail (requirement 1.2)
-        console.log('Email maintained in AuthContext:', pendingEmail || formData.email);
       } else {
         // Registration is complete without confirmation (edge case)
-        console.log('Registration complete without confirmation required');
         setRegistrationStep('confirmed');
 
         // Clear sensitive form data but maintain email for potential login
@@ -706,8 +677,6 @@ export const LoginPage = () => {
     setShowRetryOption(false);
 
     try {
-      console.log('Confirming registration with maintained email:', emailToConfirm);
-
       await confirmRegistration(emailToConfirm, formData.confirmationCode);
 
       // Clear retry state on success
@@ -715,7 +684,6 @@ export const LoginPage = () => {
 
       // Update registration step to confirmed (requirement 1.1)
       setRegistrationStep('confirmed');
-      console.log('Registration confirmation successful');
 
       // Show success message with automatic progression feedback (requirement 4.4)
       setError('Account confirmed successfully! Signing you in...');
@@ -803,7 +771,6 @@ export const LoginPage = () => {
       }
 
       // Keep the user in confirmation mode to allow retry without losing progress (requirement 3.2)
-      console.log('Confirmation failed, maintaining confirmation mode with email:', emailToConfirm);
 
       // Clear the confirmation code to allow fresh input
       setFormData(prev => ({ ...prev, confirmationCode: '' }));

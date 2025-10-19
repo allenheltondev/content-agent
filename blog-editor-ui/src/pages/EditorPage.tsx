@@ -40,7 +40,7 @@ export const EditorPage = memo(() => {
     // Simplified initialization - no complex health checks needed
     const performIntegrationCheck = async () => {
       try {
-        console.log('Editor page initialized successfully');
+        // Editor page initialized successfully
       } catch (error) {
         console.error('Editor initialization failed:', error);
       }

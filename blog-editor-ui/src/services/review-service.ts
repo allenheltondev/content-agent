@@ -439,38 +439,6 @@ export class ReviewService {
       };
     }
 
-    // Handle old format for backward compatibility
-    if (rawResponse.momentoToken && rawResponse.subscribeUrl) {
-      // Validate momento token
-      if (typeof rawResponse.momentoToken !== 'string' || rawResponse.momentoToken.trim().length === 0) {
-        throw new Error('Review response contains invalid momento token');
-      }
-
-      let endpoint: string;
-      if (rawResponse.subscribeUrl) {
-        if (typeof rawResponse.subscribeUrl !== 'string' || !this.isValidUrl(rawResponse.subscribeUrl)) {
-          throw new Error('Review response contains invalid subscribe URL');
-        }
-        endpoint = rawResponse.subscribeUrl.trim();
-      } else if (rawResponse.topicName) {
-        if (typeof rawResponse.topicName !== 'string' || rawResponse.topicName.trim().length === 0) {
-          throw new Error('Review response contains invalid topic name');
-        }
-        // Construct endpoint from topic name
-        const cacheName = process.env.MOMENTO_CACHE_NAME || 'default';
-        endpoint = `https://api.cache.cell-1-us-east-1.prod.a.momentohq.com/topics/${cacheName}/${rawResponse.topicName.trim()}`;
-      } else {
-        throw new Error('Review response missing both subscribeUrl and topicName');
-      }
-
-      return {
-        reviewId: rawResponse.reviewId || postId,
-        token: rawResponse.momentoToken.trim(),
-        endpoint: endpoint,
-        expiresAt: this.validateExpirationTime(rawResponse.expiresAt)
-      };
-    }
-
     // Check for partial data to provide better error messages
     if (rawResponse.token && !rawResponse.endpoint) {
       throw new Error('Review service response is incomplete: missing endpoint URL. Please try again.');
@@ -478,15 +446,9 @@ export class ReviewService {
     if (!rawResponse.token && rawResponse.endpoint) {
       throw new Error('Review service response is incomplete: missing authentication token. Please try again.');
     }
-    if (rawResponse.momentoToken && !rawResponse.topicName && !rawResponse.subscribeUrl) {
-      throw new Error('Review service response is incomplete: missing topic information. Please try again.');
-    }
 
     // Provide more specific error for completely invalid responses
-    const hasNewFormat = rawResponse.token || rawResponse.endpoint;
-    const hasOldFormat = rawResponse.momentoToken || rawResponse.topicName || rawResponse.subscribeUrl;
-
-    if (!hasNewFormat && !hasOldFormat) {
+    if (!rawResponse.token || !rawResponse.endpoint) {
       throw new Error('Review service returned an invalid response format. Please try again or contact support if the issue persists.');
     }
 

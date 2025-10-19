@@ -141,7 +141,7 @@ export function useResponsivePositioning(config: ResponsivePositioningConfig = {
     calculatePositioning(viewport, finalPositions, avoidElements, minClearance)
   );
 
-  const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const throttleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Get current viewport information

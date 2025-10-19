@@ -190,18 +190,7 @@ export interface AuthContextType {
   shouldSuggestResend: () => boolean;
 }
 
-// Legacy User interface for backward compatibility
-export interface User {
-  id: string;
-  email: string;
-  name?: string;
-}
 
-export interface AuthState {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-}
 // Editor state types
 export interface EditorState {
   post: BlogPost | null;
@@ -365,15 +354,12 @@ export interface ReviewSession {
   token: string;
   endpoint: string;
   expiresAt: number;
-  // Backward compatibility fields (deprecated)
-  momentoToken?: string;
-  topicName?: string;
 }
 
 export interface StartReviewResponse {
   reviewId: string;
-  token: string; // Simplified from momentoToken
-  endpoint: string; // Simplified from topicName
+  token: string;
+  endpoint: string;
   expiresAt: number;
 }
 

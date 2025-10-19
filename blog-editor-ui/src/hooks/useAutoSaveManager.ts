@@ -48,7 +48,7 @@ export function useAutoSaveManager({
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedStateRef = useRef<SaveState | null>(null);
   const retryCountRef = useRef(0);
   const maxRetries = 3;

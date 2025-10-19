@@ -106,9 +106,7 @@ const ProfileSetupPageContent = () => {
   useEffect(() => {
     // Add beforeunload listener to detect page refreshes
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      console.log('ProfileSetup: Page is about to unload/refresh');
       if (formData.isSubmitting) {
-        console.log('ProfileSetup: Page unloading during submission!');
         event.preventDefault();
         event.returnValue = 'Profile setup is in progress. Are you sure you want to leave?';
       }
