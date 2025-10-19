@@ -150,7 +150,7 @@ export const useKeyboardNavigation = (options: UseKeyboardNavigationOptions = {}
   }, [enableRovingTabindex, getFocusableElements]);
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: any) => {
       // Handle escape key
       if (enableEscape && event.key === KEYBOARD_KEYS.ESCAPE) {
         event.preventDefault();

@@ -3,46 +3,24 @@
  */
 
 import { LocalStorageManager } from './localStorage';
-import { initializeMigrations } from './migration';
 
 /**
- * Initialize app cleanup and migrations on startup
+ * Initialize app cleanup on startup
  */
-export async function initializeApp(): Promise<{
-  migrationPerformed: boolean;
-  profileMigrationNeeded: boolean;
-}> {
+export function initializeApp(): void {
   try {
     // Check if localStorage is available
     if (!LocalStorageManager.isAvailable()) {
       console.warn('localStorage is not available, some features may not work properly');
-      return {
-        migrationPerformed: false,
-        profileMigrationNeeded: false
-      };
+      return;
     }
 
     // Perform initial cleanup of old data
     LocalStorageManager.cleanupOldDrafts();
 
-    // Initialize migrations
-    const migrationResult = await initializeMigrations();
-
-    console.log('App initialization completed', {
-      versionMigrationPerformed: migrationResult.versionMigrationPerformed,
-      profileMigrationNeeded: migrationResult.profileMigrationNeeded
-    });
-
-    return {
-      migrationPerformed: migrationResult.versionMigrationPerformed,
-      profileMigrationNeeded: migrationResult.profileMigrationNeeded
-    };
+    console.log('App initialization completed');
   } catch (error) {
     console.error('App initialization failed:', error);
-    return {
-      migrationPerformed: false,
-      profileMigrationNeeded: false
-    };
   }
 }
 
@@ -77,11 +55,6 @@ export function cleanupOnProfileCompletion(): void {
 
     // Clean up sensitive data
     LocalStorageManager.cleanupSensitiveData();
-
-    // Mark migration as completed
-    LocalStorageManager.setMigrationStatus({
-      profileMigrationCompleted: true
-    });
 
     console.log('Profile completion cleanup completed');
   } catch (error) {
@@ -125,12 +98,10 @@ export function emergencyCleanup(): void {
  */
 export function getCleanupStatus(): {
   storageInfo: ReturnType<typeof LocalStorageManager.getStorageInfo>;
-  migrationStatus: ReturnType<typeof LocalStorageManager.getMigrationStatus>;
   recommendsCleanup: boolean;
 } {
   try {
     const storageInfo = LocalStorageManager.getStorageInfo();
-    const migrationStatus = LocalStorageManager.getMigrationStatus();
 
     // Recommend cleanup if there are many draft keys or large storage usage
     const recommendsCleanup = storageInfo.draftKeys > 10 ||
@@ -138,7 +109,6 @@ export function getCleanupStatus(): {
 
     return {
       storageInfo,
-      migrationStatus,
       recommendsCleanup
     };
   } catch (error) {
@@ -151,7 +121,6 @@ export function getCleanupStatus(): {
         hasProfileDraft: false,
         hasNewPostDraft: false
       },
-      migrationStatus: null,
       recommendsCleanup: false
     };
   }

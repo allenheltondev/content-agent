@@ -54,7 +54,7 @@ const getSuggestionColors = (type: SuggestionType) => {
  */
 const getTypeDisplayName = (type: SuggestionType): string => {
   const nameMap = {
-    llm: 'AI Suggestion',
+    llm: 'Writing Enhancement',
     brand: 'Brand Guidelines',
     fact: 'Fact Check',
     grammar: 'Grammar',
@@ -234,15 +234,21 @@ export const SuggestionList = ({
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4">
               <button
                 onClick={() => onAccept(suggestion.id)}
-                className="flex-1 px-4 py-3 sm:py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 touch-manipulation"
+                className="flex-1 inline-flex items-center justify-center px-4 py-3 sm:py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all duration-200 touch-manipulation shadow-sm"
               >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
                 <span className="hidden sm:inline">Accept Change</span>
                 <span className="sm:hidden">Accept</span>
               </button>
               <button
                 onClick={() => onReject(suggestion.id)}
-                className="flex-1 px-4 py-3 sm:py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200 touch-manipulation"
+                className="flex-1 inline-flex items-center justify-center px-4 py-3 sm:py-2.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-all duration-200 touch-manipulation"
               >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
                 Reject
               </button>
             </div>

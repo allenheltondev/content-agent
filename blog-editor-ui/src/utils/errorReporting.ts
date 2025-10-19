@@ -19,7 +19,7 @@ export interface ErrorReport {
     sessionId?: string;
   };
   severity: 'low' | 'medium' | 'high' | 'critical';
-  category: 'editor' | 'apiauth' | 'storage' | 'network' | 'unknown';
+  category: 'editor' | 'api' | 'auth' | 'storage' | 'network' | 'unknown';
   metadata?: Record<string, any>;
 }
 
@@ -132,10 +132,10 @@ export class ErrorReportingManager {
   ): string {
     return this.reportError(
       error,
-      { endpoint, method },
+      {},
       statusCode && statusCode >= 500 ? 'high' : 'medium',
       'api',
-      { statusCode, ...metadata }
+      { endpoint, method, statusCode, ...metadata }
     );
   }
 
@@ -150,10 +150,10 @@ export class ErrorReportingManager {
   ): string {
     return this.reportError(
       error,
-      { operation, key },
+      {},
       'medium',
       'storage',
-      metadata
+      { operation, key, ...metadata }
     );
   }
 

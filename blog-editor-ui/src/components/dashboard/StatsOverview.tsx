@@ -85,7 +85,7 @@ export const StatsOverview = ({ className = '' }: StatsOverviewProps) => {
         </div>
       </div>
 
-      {/* AI Suggestions */}
+      {/* Writing Improvements */}
       <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 shadow-lg border border-white/20 hover:shadow-xl transition-all duration-300">
         <div className="flex items-center">
           <div className="p-2 sm:p-3 bg-secondary/10 rounded-lg flex-shrink-0">
@@ -94,7 +94,7 @@ export const StatsOverview = ({ className = '' }: StatsOverviewProps) => {
             </svg>
           </div>
           <div className="ml-3 sm:ml-4 min-w-0">
-            <p className="text-xs sm:text-sm font-medium text-gray-600">AI Suggestions</p>
+            <p className="text-xs sm:text-sm font-medium text-gray-600">Writing Improvements</p>
             {isLoading ? (
               <div className="animate-pulse">
                 <div className="h-6 sm:h-8 bg-gray-200 rounded w-12"></div>

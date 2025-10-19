@@ -76,11 +76,7 @@ export const handler = async (event) => {
       reviewId: postId,
       token: momentoToken,
       endpoint: `${process.env.SUBSCRIBE_BASE_URL}/topics/${process.env.MOMENTO_CACHE_NAME}/${topicName}`,
-      expiresAt: Math.floor(Date.now() / 1000) + (10 * 60), // 10 minutes from now
-      // Backward compatibility fields
-      momentoToken,
-      topicName,
-      subscribeUrl: `${process.env.SUBSCRIBE_BASE_URL}/topics/${process.env.MOMENTO_CACHE_NAME}/${topicName}`
+      expiresAt: Math.floor(Date.now() / 1000) + (10 * 60) // 10 minutes from now
     };
 
     return formatResponse(200, response);

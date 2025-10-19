@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { SuggestionOverlay } from './SuggestionOverlay';
+import { SuggestionHighlightOverlay } from './SuggestionHighlightOverlay';
+import { IntegratedActiveSuggestionSystem } from './IntegratedActiveSuggestionSystem';
 import type { Suggestion } from '../../types';
 
 interface ContentEditorWithSuggestionsProps {
@@ -8,9 +9,11 @@ interface ContentEditorWithSuggestionsProps {
   onChange: (content: string) => void;
   onAcceptSuggestion: (id: string) => void;
   onRejectSuggestion: (id: string) => void;
+  onSuggestionExpand?: (suggestionId: string) => void;
   placeholder?: string;
   disabled?: boolean;
   showSuggestions?: boolean;
+  useActiveSuggestionSystem?: boolean; // New prop to enable the active suggestion system
 }
 
 /**
@@ -22,9 +25,11 @@ export const ContentEditorWithSuggestions = ({
   onChange,
   onAcceptSuggestion,
   onRejectSuggestion,
+  onSuggestionExpand,
   placeholder = "Start writing your blog post...",
   disabled = false,
-  showSuggestions = true
+  showSuggestions = true,
+  useActiveSuggestionSystem = false // Default to using highlight-only system
 }: ContentEditorWithSuggestionsProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -110,41 +115,83 @@ export const ContentEditorWithSuggestions = ({
     onAcceptSuggestion(suggestionId);
   }, [content, suggestions, onChange, onAcceptSuggestion]);
 
-  // Handle suggestion rejection
-  const handleRejectSuggestion = useCallback((suggestionId: string) => {
-    onRejectSuggestion(suggestionId);
-  }, [onRejectSuggestion]);
+
 
   return (
     <div ref={containerRef} className="relative">
       {/* Container for textarea and overlay */}
       <div className="relative">
-        {/* Suggestion overlay */}
+        {/* Integrated Active Suggestion System or Legacy Overlay */}
         {showSuggestions && suggestions.length > 0 && (
-          <div
-            ref={overlayRef}
-            className="absolute inset-0 pointer-events-none overflow-hidden"
-            style={{
-              zIndex: 1,
-              paddingTop: '24px', // Match textarea padding
-              paddingLeft: '24px',
-              paddingRight: '24px',
-              paddingBottom: '24px',
-              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-              fontSize: '14px',
-              lineHeight: '1.6',
-              whiteSpace: 'pre-wrap',
-              wordWrap: 'break-word'
-            }}
-          >
-            <SuggestionOverlay
-              suggestions={suggestions}
-              content={content}
-              onAccept={handleAcceptSuggestion}
-              onReject={handleRejectSuggestion}
-              className="pointer-events-auto"
-            />
-          </div>
+          <>
+            {useActiveSuggestionSystem ? (
+              // New integrated active suggestion system
+              <div
+                ref={overlayRef}
+                className="absolute inset-0 pointer-events-auto overflow-visible"
+                style={{
+                  zIndex: 10,
+                  paddingTop: '24px', // Match textarea padding
+                  paddingLeft: '24px',
+                  paddingRight: '24px',
+                  paddingBottom: '24px',
+                  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap',
+                  wordWrap: 'break-word'
+                }}
+              >
+                <IntegratedActiveSuggestionSystem
+                  suggestions={[...suggestions].sort((a,b)=>a.startOffset-b.startOffset)}
+                  content={content}
+                  onAcceptSuggestion={onAcceptSuggestion}
+                  onRejectSuggestion={onRejectSuggestion}
+                  onEditSuggestion={(suggestionId, _newText) => {
+                    // Handle suggestion editing - for now, just accept with the new text
+                    onAcceptSuggestion(suggestionId);
+                  }}
+                  className="pointer-events-auto"
+                  config={{
+                    enableAutoAdvance: true,
+                    enableScrollToActive: true,
+                    enableTransitions: true,
+                    enablePerformanceMonitoring: true,
+                    enableResponsivePositioning: true
+                  }}
+                />
+              </div>
+            ) : (
+              // Legacy suggestion overlay system
+              <div
+                ref={overlayRef}
+                className="absolute inset-0 pointer-events-auto overflow-visible"
+                style={{
+                  zIndex: 10,
+                  paddingTop: '24px', // Match textarea padding
+                  paddingLeft: '24px',
+                  paddingRight: '24px',
+                  paddingBottom: '24px',
+                  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap',
+                  wordWrap: 'break-word'
+                }}
+              >
+                <SuggestionHighlightOverlay
+                  suggestions={[...suggestions].sort((a,b)=>a.startOffset-b.startOffset)}
+                  content={content}
+                  onSuggestionClick={(suggestionId) => {
+                    // Handle click to accept suggestion
+                    handleAcceptSuggestion(suggestionId);
+                  }}
+                  onSuggestionExpand={onSuggestionExpand}
+                  className="pointer-events-auto"
+                />
+              </div>
+            )}
+          </>
         )}
 
         {/* Textarea */}
@@ -177,69 +224,13 @@ export const ContentEditorWithSuggestions = ({
         )}
       </div>
 
-      {/* Character count */}
-      <div className="absolute bottom-4 right-6 text-xs text-gray-400 z-10">
-        {content.length.toLocaleString()} characters
-      </div>
+      {/* Character count removed */}
 
-      {/* Suggestion count indicator */}
-      {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute top-4 right-6 z-10">
-          <div className="flex items-center space-x-2 bg-white rounded-full px-3 py-1 shadow-sm border border-gray-200">
-            <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-            <span className="text-xs text-gray-600 font-medium">
-              {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Suggestion count indicator removed */}
 
-      {/* Writing tips overlay when empty */}
-      {content.length === 0 && !disabled && (
-        <div className="absolute top-20 left-6 right-6 text-sm text-gray-400 pointer-events-none z-10">
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <h3 className="font-medium text-gray-600 mb-2">Writing Tips:</h3>
-            <ul className="space-y-1 text-xs">
-              <li>• Use Cmd/Ctrl + S to save your work</li>
-              <li>• Your content is automatically saved as you type</li>
-              <li>• AI suggestions will appear when you edit existing posts</li>
-              <li>• Use Tab to indent text</li>
-              <li>• Hover over highlighted text to see suggestions</li>
-            </ul>
-          </div>
-        </div>
-      )}
+      {/* Writing tips overlay removed */}
 
-      {/* Suggestion legend */}
-      {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute bottom-4 left-6 z-10">
-          <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 text-xs">
-            <div className="font-medium text-gray-700 mb-2">Suggestion Types:</div>
-            <div className="flex flex-wrap gap-2">
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-blue-200 border border-blue-400 rounded-sm" />
-                <span className="text-gray-600">AI</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-purple-200 border border-purple-400 rounded-sm" />
-                <span className="text-gray-600">Brand</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-orange-200 border border-orange-400 rounded-sm" />
-                <span className="text-gray-600">Fact</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-green-200 border border-green-400 rounded-sm" />
-                <span className="text-gray-600">Grammar</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-3 h-3 bg-red-200 border border-red-400 rounded-sm" />
-                <span className="text-gray-600">Spelling</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Suggestion legend removed */}
     </div>
   );
 };

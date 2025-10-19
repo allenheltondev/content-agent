@@ -35,7 +35,7 @@ export function useAutoSave({
 }: UseAutoSaveOptions): UseAutoSaveReturn {
   const { loading: isSaving, error: saveError, mutate, clearError } = useApiMutation<BlogPost>();
   const lastSavedRef = useRef<Date | null>(null);
-  const timeoutRef = useRef<number | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedContentRef = useRef<{ title: string; content: string } | null>(null);
 
   // Save function

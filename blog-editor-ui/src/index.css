@@ -209,4 +209,105 @@
   .safe-right {
     padding-right: env(safe-area-inset-right);
   }
+
+  /* Enhanced animation utilities */
+  .animate-in {
+    animation-fill-mode: both;
+  }
+
+  .animate-out {
+    animation-fill-mode: both;
+    animation-direction: reverse;
+  }
+
+  /* Smooth expand/collapse animations */
+  .expand-enter {
+    overflow: hidden;
+    animation: expand 0.3s ease-out forwards;
+  }
+
+  .expand-exit {
+    overflow: hidden;
+    animation: collapse 0.3s ease-in forwards;
+  }
+
+  /* Interactive element hover effects */
+  .hover-lift {
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Button press animation */
+  .button-press {
+    transition: transform 0.1s ease-out;
+  }
+
+  .button-press:active {
+    transform: scale(0.98);
+  }
+
+  /* Suggestion highlight animations */
+  .suggestion-highlight {
+    transition: all 0.2s ease-out;
+    position: relative;
+  }
+
+  .suggestion-highlight:hover {
+    transform: scale(1.02);
+    z-index: 10;
+  }
+
+  .suggestion-highlight::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+    pointer-events: none;
+  }
+
+  .suggestion-highlight:hover::before {
+    opacity: 0.1;
+    background: currentColor;
+  }
+
+  /* Loading state animations */
+  .loading-shimmer {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  /* Staggered animation delays for lists */
+  .stagger-1 { animation-delay: 0.1s; }
+  .stagger-2 { animation-delay: 0.2s; }
+  .stagger-3 { animation-delay: 0.3s; }
+  .stagger-4 { animation-delay: 0.4s; }
+  .stagger-5 { animation-delay: 0.5s; }
+
+  /* Focus ring animations */
+  .focus-ring {
+    transition: box-shadow 0.2s ease-out;
+  }
+
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 3px rgba(33, 158, 255, 0.3);
+  }
 }

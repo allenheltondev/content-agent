@@ -184,7 +184,7 @@ export const EditorActions = ({
           {!isWorkflowDisabled && (
             <div className="hidden lg:flex items-center space-x-4">
               <span>
-                <strong>Submit for Review:</strong> Get real-time AI suggestions and feedback
+                <strong>Submit for Review:</strong> Get real-time writing improvements and feedback
               </span>
               <span>
                 <strong>Finalize:</strong> Mark as complete and ready to publish

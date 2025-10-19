@@ -1,6 +1,5 @@
 import { type ReactNode } from 'react';
 import { requiresReauth, isRetryableError, getErrorMessage } from '../../utils/apiErrorHandler';
-import { ARIA_LABELS, screenReader } from '../../utils/accessibility';
 import type { ApiError } from '../../types';
 
 interface ProfileErrorDisplayProps {

@@ -5,11 +5,11 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { useToast } from '../hooks/useToast';
 import { useProfileSetup } from '../hooks/useProfileSetup';
 import { Logo } from '../components/common/Logo';
-import { ProfileErrorBoundary, ProfileErrorDisplay, ProfileOperationLoading } from '../components/profile';
+import { ProfileErrorBoundary } from '../components/profile';
 import { ProfileSetupRecoveryNotification } from '../components/profile/ProfileSetupRecoveryNotification';
-import { ARIA_LABELS, KEYBOARD_KEYS, screenReader, generateId, createAriaDescribedBy } from '../utils/accessibility';
+import { screenReader, generateId, createAriaDescribedBy } from '../utils/accessibility';
 import { LocalStorageManager } from '../utils/localStorage';
-import type { ProfileSetupData, CreateProfileRequest } from '../types';
+import type { ProfileSetupData } from '../types';
 
 // Predefined topic options
 const PREDEFINED_TOPICS = [
@@ -72,7 +72,7 @@ const ProfileSetupPageContent = () => {
     nextStep,
     previousStep,
     submitProfile,
-    hasRecoverableData,
+
     showRecoveryPrompt,
     recoverDraftData,
     dismissRecoveryPrompt,

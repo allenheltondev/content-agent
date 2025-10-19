@@ -4,7 +4,6 @@ import { apiService } from '../services/ApiService';
 import { useAuth } from '../hooks/useAuth';
 import { logError, isRetryableError } from '../utils/apiErrorHandler';
 import { LocalStorageManager } from '../utils/localStorage';
-import type { MigrationResult } from '../utils/migration';
 
 interface ProfileContextType {
   // Profile data
@@ -23,10 +22,6 @@ interface ProfileContextType {
   // Profile setup state
   isProfileComplete: boolean;
   isCheckingProfile: boolean;
-
-  // Migration state
-  isMigrating: boolean;
-  migrationResult: MigrationResult | null;
 
   // Error handling state
   retryCount: number;
@@ -50,9 +45,7 @@ export const ProfileProvider = ({ children }: ProfileProviderProps) => {
   const [lastOperation, setLastOperation] = useState<'create' | 'update' | 'load' | null>(null);
   const [lastOperationData, setLastOperationData] = useState<CreateProfileRequest | UpdateProfileRequest | null>(null);
 
-  // Migration state (simplified)
-  const [isMigrating, setIsMigrating] = useState(false);
-  const [migrationResult, setMigrationResult] = useState<MigrationResult | null>(null);
+
 
   // Derived state
   const isProfileComplete = profile?.isComplete ?? false;
@@ -78,11 +71,6 @@ export const ProfileProvider = ({ children }: ProfileProviderProps) => {
       const userProfile = await apiService.getProfile();
       setProfile(userProfile);
       setError(null);
-
-      // Mark migration as completed if profile exists
-      LocalStorageManager.setMigrationStatus({
-        profileMigrationCompleted: true
-      });
     } catch (err) {
       const error = err as ApiError | Error;
 
@@ -147,10 +135,7 @@ export const ProfileProvider = ({ children }: ProfileProviderProps) => {
       setError(null);
       setRetryCount(0);
 
-      // Mark migration as completed and perform cleanup
-      LocalStorageManager.setMigrationStatus({
-        profileMigrationCompleted: true
-      });
+      // Perform cleanup after profile creation
       LocalStorageManager.performCompleteCleanup();
 
       return newProfile;
@@ -214,8 +199,6 @@ export const ProfileProvider = ({ children }: ProfileProviderProps) => {
     setRetryCount(0);
     setLastOperation(null);
     setLastOperationData(null);
-    setIsMigrating(false);
-    setMigrationResult(null);
 
     // Perform cleanup when clearing profile
     LocalStorageManager.performCompleteCleanup();
@@ -268,8 +251,6 @@ export const ProfileProvider = ({ children }: ProfileProviderProps) => {
     retryCount,
     canRetry,
     lastOperation,
-    isMigrating,
-    migrationResult,
   };
 
   return (

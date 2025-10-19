@@ -70,7 +70,7 @@ export function getSuggestionColors(type: SuggestionType) {
  */
 export function getSuggestionTypeDisplayName(type: SuggestionType): string {
   const displayNames = {
-    llm: 'AI Suggestion',
+    llm: 'Writing Enhancement',
     brand: 'Brand Guidelines',
     fact: 'Fact Check',
     grammar: 'Grammar',

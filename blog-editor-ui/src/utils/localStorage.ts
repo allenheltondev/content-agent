@@ -9,8 +9,7 @@ export const STORAGE_KEYS = {
   NEW_POST_DRAFT: 'new_post_draft',
   DISMISSED_INFO_BOXES: 'dismissed_info_boxes',
   EDITOR_PREFERENCES: 'editor_preferences',
-  DRAFT_PREFIX: 'draft_',
-  MIGRATION_STATUS: 'migration_status'
+  DRAFT_PREFIX: 'draft_'
 } as const;
 
 // Data interfaces
@@ -31,11 +30,7 @@ export interface NewPostDraft {
   version: string;
 }
 
-export interface MigrationStatus {
-  profileMigrationCompleted: boolean;
-  lastMigrationVersion: string;
-  timestamp: number;
-}
+
 
 // Sensitive data patterns to clean up
 const SENSITIVE_PATTERNS = [
@@ -84,148 +79,67 @@ export class LocalStorageManager {
    * Save profile setup draft data
    */
   static saveProfileSetupDraft(data: Partial<ProfileSetupDraft>): void {
-    try {
-      const existing = this.getProfileSetupDraft();
-      const draftData: ProfileSetupDraft = {
-        writingTone: data.writingTone || existing?.writingTone || '',
-        writingStyle: data.writingStyle || existing?.writingStyle || '',
-        topics: data.topics || existing?.topics || [],
-        skillLevel: data.skillLevel || existing?.skillLevel || 'beginner',
-        currentStep: data.currentStep || existing?.currentStep || 1,
-        timestamp: Date.now(),
-        version: getAppVersion()
-      };
-
-      localStorage.setItem(STORAGE_KEYS.PROFILE_SETUP_DRAFT, JSON.stringify(draftData));
-    } catch (error) {
-      console.warn('Failed to save profile setup draft:', error);
-    }
+    // Disabled: no-op for hackathon to avoid local draft persistence
+    return;
   }
 
   /**
    * Get profile setup draft data
    */
   static getProfileSetupDraft(): ProfileSetupDraft | null {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.PROFILE_SETUP_DRAFT);
-      return safeJsonParse(stored, null);
-    } catch (error) {
-      console.warn('Failed to load profile setup draft:', error);
-      return null;
-    }
+    // Disabled: no local profile draft recovery
+    return null;
   }
 
   /**
    * Clear profile setup draft data
    */
   static clearProfileSetupDraft(): void {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.PROFILE_SETUP_DRAFT);
-    } catch (error) {
-      console.warn('Failed to clear profile setup draft:', error);
-    }
+    // Disabled: no-op
+    return;
   }
 
   /**
    * Check if profile setup draft exists and is recent
    */
   static hasRecentProfileSetupDraft(maxAgeMs: number = 24 * 60 * 60 * 1000): boolean {
-    const draft = this.getProfileSetupDraft();
-    if (!draft) return false;
-
-    const age = Date.now() - draft.timestamp;
-    return age <= maxAgeMs;
+    // Disabled: always false
+    return false;
   }
 
   /**
    * Save new post draft data
    */
   static saveNewPostDraft(data: Partial<NewPostDraft>): void {
-    try {
-      const existing = this.getNewPostDraft();
-      const draftData: NewPostDraft = {
-        title: data.title || existing?.title || '',
-        content: data.content || existing?.content || '',
-        timestamp: Date.now(),
-        version: getAppVersion()
-      };
-
-      // Only save if there's actual content
-      if (draftData.title.trim() || draftData.content.trim()) {
-        localStorage.setItem(STORAGE_KEYS.NEW_POST_DRAFT, JSON.stringify(draftData));
-      } else {
-        this.clearNewPostDraft();
-      }
-    } catch (error) {
-      console.warn('Failed to save new post draft:', error);
-    }
+    // Disabled: no-op
+    return;
   }
 
   /**
    * Get new post draft data
    */
   static getNewPostDraft(): NewPostDraft | null {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.NEW_POST_DRAFT);
-      return safeJsonParse(stored, null);
-    } catch (error) {
-      console.warn('Failed to load new post draft:', error);
-      return null;
-    }
+    // Disabled: no local new-post draft recovery
+    return null;
   }
 
   /**
    * Clear new post draft data
    */
   static clearNewPostDraft(): void {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.NEW_POST_DRAFT);
-    } catch (error) {
-      console.warn('Failed to clear new post draft:', error);
-    }
+    // Disabled: no-op
+    return;
   }
 
   /**
    * Check if new post draft exists and is recent
    */
   static hasRecentNewPostDraft(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): boolean {
-    const draft = this.getNewPostDraft();
-    if (!draft) return false;
-
-    const age = Date.now() - draft.timestamp;
-    return age <= maxAgeMs && Boolean(draft.title.trim() || draft.content.trim());
+    // Disabled: always false
+    return false;
   }
 
-  /**
-   * Get migration status
-   */
-  static getMigrationStatus(): MigrationStatus | null {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.MIGRATION_STATUS);
-      return safeJsonParse(stored, null);
-    } catch (error) {
-      console.warn('Failed to load migration status:', error);
-      return null;
-    }
-  }
 
-  /**
-   * Set migration status
-   */
-  static setMigrationStatus(status: Partial<MigrationStatus>): void {
-    try {
-      const existing = this.getMigrationStatus();
-      const migrationStatus: MigrationStatus = {
-        profileMigrationCompleted: status.profileMigrationCompleted ?? existing?.profileMigrationCompleted ?? false,
-        lastMigrationVersion: status.lastMigrationVersion || getAppVersion(),
-        timestamp: Date.now()
-      };
-
-      localStorage.setItem(STORAGE_KEYS.MIGRATION_STATUS, JSON.stringify(migrationStatus));
-    } catch (error) {
-      console.warn('Failed to save migration status:', error);
-    }
-  }
 
   /**
    * Clean up sensitive data from localStorage
@@ -260,46 +174,8 @@ export class LocalStorageManager {
    * Clean up old draft data based on age
    */
   static cleanupOldDrafts(maxAgeMs: number = 30 * 24 * 60 * 60 * 1000): void {
-    try {
-      const now = Date.now();
-
-      // Clean up old profile setup drafts
-      const profileDraft = this.getProfileSetupDraft();
-      if (profileDraft && (now - profileDraft.timestamp) > maxAgeMs) {
-        this.clearProfileSetupDraft();
-        console.log('Cleaned up old profile setup draft');
-      }
-
-      // Clean up old new post drafts
-      const postDraft = this.getNewPostDraft();
-      if (postDraft && (now - postDraft.timestamp) > maxAgeMs) {
-        this.clearNewPostDraft();
-        console.log('Cleaned up old new post draft');
-      }
-
-      // Clean up old regular post drafts
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(STORAGE_KEYS.DRAFT_PREFIX)) {
-          try {
-            const stored = localStorage.getItem(key);
-            if (stored) {
-              const data = JSON.parse(stored);
-              if (data.timestamp && (now - data.timestamp) > maxAgeMs) {
-                localStorage.removeItem(key);
-                console.log(`Cleaned up old draft: ${key}`);
-              }
-            }
-          } catch (error) {
-            // If we can't parse it, it's probably corrupted, so remove it
-            localStorage.removeItem(key);
-            console.log(`Cleaned up corrupted draft: ${key}`);
-          }
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to cleanup old drafts:', error);
-    }
+    // Disabled: no-op
+    return;
   }
 
   /**
@@ -336,8 +212,8 @@ export class LocalStorageManager {
         totalKeys,
         draftKeys,
         estimatedSize,
-        hasProfileDraft: !!this.getProfileSetupDraft(),
-        hasNewPostDraft: !!this.getNewPostDraft()
+        hasProfileDraft: false,
+        hasNewPostDraft: false
       };
     } catch (error) {
       console.warn('Failed to get storage info:', error);

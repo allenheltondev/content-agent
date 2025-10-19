@@ -7,7 +7,6 @@ import { EditorPage } from '../../pages/EditorPage';
 import { ProfileSetupPage } from '../../pages/ProfileSetupPage';
 import { ProfilePage } from '../../pages/ProfilePage';
 import { AboutMyWritingPage } from '../../pages/AboutMyWritingPage';
-import { DebugPage } from '../../pages/DebugPage';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -93,11 +92,7 @@ export const AppRouter = () => {
           }
         />
 
-        {/* Debug route - for testing authentication persistence */}
-        <Route
-          path="/debug"
-          element={<DebugPage />}
-        />
+        {/** Debug route removed for demo cleanup */}
 
         {/* Protected routes that require both authentication and profile completion */}
         <Route

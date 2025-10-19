@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Suggestion } from '../types';
 import { suggestionService } from '../services/SuggestionService';
 import { apiService } from '../services/ApiService';
+import { useOptimisticSuggestionResolution } from './useOptimisticSuggestionResolution';
+import { useOptimizedSuggestionState } from './useOptimizedSuggestionState';
 
 /**
  * Undo action for suggestion acceptance
@@ -46,6 +48,57 @@ export interface SuggestionManagerConfig {
   maxUndoHistory: number;
   persistState: boolean;
   autoSaveOnAccept: boolean;
+  onSuccess?: (action: string, suggestionId: string) => void;
+  onError?: (error: string, action: string, suggestionId: string) => void;
+}
+
+/**
+ * Retry configuration for suggestion actions
+ */
+// Legacy retry config interface removed (handled elsewhere)
+
+/**
+ * Default retry configuration for suggestion actions
+ */
+// Note: retry config handled in optimistic resolution system
+
+// Note: retryApiCall is now handled by the optimistic resolution system
+
+/**
+ * Get user-friendly error message for suggestion actions
+ */
+function getUserFriendlyErrorMessage(error: any, action: string): string {
+  if (!error) return `Failed to ${action} suggestion`;
+
+  const errorMessage = error.message || error.toString();
+
+  // Network errors
+  if (errorMessage.includes('Network request failed') || errorMessage.includes('NETWORK_ERROR')) {
+    return `Network error while trying to ${action} suggestion. Please check your connection and try again.`;
+  }
+
+  // Authentication errors
+  if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
+    return `Authentication error. Please refresh the page and try again.`;
+  }
+
+  // Post ID errors
+  if (errorMessage.includes('Post ID is required')) {
+    return `Unable to ${action} suggestion. Please save your post first and try again.`;
+  }
+
+  // Suggestion not found errors
+  if (errorMessage.includes('Suggestion not found') || errorMessage.includes('404')) {
+    return `This suggestion is no longer available. It may have been already processed.`;
+  }
+
+  // Server errors
+  if (errorMessage.includes('500') || errorMessage.includes('Something went wrong')) {
+    return `Server error while trying to ${action} suggestion. Please try again in a moment.`;
+  }
+
+  // Default fallback
+  return `Failed to ${action} suggestion. ${errorMessage}`;
 }
 
 /**
@@ -56,6 +109,20 @@ export function useSuggestionManager(
   onContentChange: (content: string) => void,
   config: SuggestionManagerConfig
 ) {
+  // Enhanced state management with optimization
+  const optimizedState = useOptimizedSuggestionState([], {
+    enableMemoization: true,
+    batchStateUpdates: true,
+    batchDelay: 50
+  });
+
+  // Optimistic resolution system
+  const optimisticResolution = useOptimisticSuggestionResolution({
+    enableBatching: true,
+    batchDelay: 300,
+    maxBatchSize: 10
+  });
+
   const [state, setState] = useState<SuggestionManagerState>({
     allSuggestions: [], // Store all suggestions from API
     acceptedSuggestions: [],
@@ -137,7 +204,10 @@ export function useSuggestionManager(
    * Load suggestions from API
    */
   const loadSuggestions = useCallback(async () => {
-    if (!config.postId) return;
+    if (!config.postId) {
+      console.warn('Cannot load suggestions: Post ID is required');
+      return;
+    }
 
     // Don't start new request if same post is already loading
     if (requestManagerRef.current.isRequestInProgress &&
@@ -177,6 +247,9 @@ export function useSuggestionManager(
         isLoading: false
       }));
 
+      // Update optimized state with new suggestions
+      optimizedState.updateSuggestions(response.suggestions);
+
       // Mark request as complete and clean up controller reference
       requestManagerRef.current.isRequestInProgress = false;
       requestManagerRef.current.currentController = null;
@@ -187,9 +260,10 @@ export function useSuggestionManager(
 
       if (error.name !== 'AbortError') {
         console.error('Failed to load suggestions:', error);
+        const userMessage = getUserFriendlyErrorMessage(error, 'load');
         setState(prev => ({
           ...prev,
-          error: error.message || 'Failed to load suggestions',
+          error: userMessage,
           isLoading: false
         }));
       } else {
@@ -206,6 +280,15 @@ export function useSuggestionManager(
     const suggestion = state.allSuggestions.find(s => s.id === suggestionId);
     if (!suggestion) {
       console.warn('Suggestion not found:', suggestionId);
+      const errorMessage = 'This suggestion is no longer available. It may have been already processed.';
+      setState(prev => ({ ...prev, error: errorMessage }));
+      return;
+    }
+
+    if (!config.postId) {
+      console.error('Post ID is required for suggestion actions');
+      const errorMessage = 'Unable to accept suggestion. Please save your post first and try again.';
+      setState(prev => ({ ...prev, error: errorMessage }));
       return;
     }
 
@@ -223,36 +306,36 @@ export function useSuggestionManager(
         timestamp: Date.now()
       };
 
-      // Update state
+      // Update state optimistically
       setState(prev => {
         const newUndoHistory = [undoAction, ...prev.undoHistory].slice(0, config.maxUndoHistory);
 
         return {
           ...prev,
           acceptedSuggestions: [...prev.acceptedSuggestions, suggestionId],
-          undoHistory: newUndoHistory
+          undoHistory: newUndoHistory,
+          error: null // Clear any previous errors
         };
       });
+
+      // Update optimized state
+      optimizedState.markAccepted(suggestionId);
 
       // Update content
       onContentChange(newContent);
 
-      // Delete suggestion from backend
-      try {
-        await apiService.deleteSuggestion(suggestionId);
-      } catch (error) {
-        console.warn('Failed to delete suggestion from backend:', error);
-        // Don't fail the acceptance if backend deletion fails
-      }
+      // Use optimistic resolution for backend update
+      optimisticResolution.resolveSuggestion(config.postId, suggestionId, 'accepted');
+
+      // Call success callback
+      config.onSuccess?.('accept', suggestionId);
 
     } catch (error: any) {
       console.error('Failed to accept suggestion:', error);
-      setState(prev => ({
-        ...prev,
-        error: error.message || 'Failed to accept suggestion'
-      }));
+      const userMessage = getUserFriendlyErrorMessage(error, 'accept');
+      setState(prev => ({ ...prev, error: userMessage }));
     }
-  }, [state.allSuggestions, content, onContentChange, config.maxUndoHistory]);
+  }, [state.allSuggestions, content, onContentChange, config.maxUndoHistory, config.postId, optimizedState, optimisticResolution]);
 
   /**
    * Reject a suggestion and remove it from UI
@@ -261,32 +344,86 @@ export function useSuggestionManager(
     const suggestion = state.allSuggestions.find(s => s.id === suggestionId);
     if (!suggestion) {
       console.warn('Suggestion not found:', suggestionId);
+      const errorMessage = 'This suggestion is no longer available. It may have been already processed.';
+      setState(prev => ({ ...prev, error: errorMessage }));
+      return;
+    }
+
+    if (!config.postId) {
+      console.error('Post ID is required for suggestion actions');
+      const errorMessage = 'Unable to reject suggestion. Please save your post first and try again.';
+      setState(prev => ({ ...prev, error: errorMessage }));
       return;
     }
 
     try {
-      // Update state
+      // Update state optimistically
       setState(prev => ({
         ...prev,
-        rejectedSuggestions: [...prev.rejectedSuggestions, suggestionId]
+        rejectedSuggestions: [...prev.rejectedSuggestions, suggestionId],
+        error: null // Clear any previous errors
       }));
 
-      // Delete suggestion from backend
-      try {
-        await apiService.deleteSuggestion(suggestionId);
-      } catch (error) {
-        console.warn('Failed to delete suggestion from backend:', error);
-        // Don't fail the rejection if backend deletion fails
-      }
+      // Update optimized state
+      optimizedState.markRejected(suggestionId);
+
+      // Use optimistic resolution for backend update
+      optimisticResolution.resolveSuggestion(config.postId, suggestionId, 'rejected');
+
+      // Call success callback
+      config.onSuccess?.('reject', suggestionId);
 
     } catch (error: any) {
       console.error('Failed to reject suggestion:', error);
+      const userMessage = getUserFriendlyErrorMessage(error, 'reject');
+      setState(prev => ({ ...prev, error: userMessage }));
+    }
+  }, [state.allSuggestions, config.postId, optimizedState, optimisticResolution]);
+
+  /**
+   * Delete a suggestion permanently
+   */
+  const deleteSuggestion = useCallback(async (suggestionId: string) => {
+    const suggestion = state.allSuggestions.find(s => s.id === suggestionId);
+    if (!suggestion) {
+      console.warn('Suggestion not found:', suggestionId);
+      const errorMessage = 'This suggestion is no longer available. It may have been already processed.';
+      setState(prev => ({ ...prev, error: errorMessage }));
+      return;
+    }
+
+    if (!config.postId) {
+      console.error('Post ID is required for suggestion actions');
+      const errorMessage = 'Unable to delete suggestion. Please save your post first and try again.';
+      setState(prev => ({ ...prev, error: errorMessage }));
+      return;
+    }
+
+    try {
+      // Remove from local state optimistically
       setState(prev => ({
         ...prev,
-        error: error.message || 'Failed to reject suggestion'
+        allSuggestions: prev.allSuggestions.filter(s => s.id !== suggestionId),
+        acceptedSuggestions: prev.acceptedSuggestions.filter(id => id !== suggestionId),
+        rejectedSuggestions: prev.rejectedSuggestions.filter(id => id !== suggestionId),
+        error: null // Clear any previous errors
       }));
+
+      // Update optimized state
+      optimizedState.markDeleted(suggestionId);
+
+      // Use optimistic resolution for backend update
+      optimisticResolution.resolveSuggestion(config.postId, suggestionId, 'deleted');
+
+      // Call success callback
+      config.onSuccess?.('delete', suggestionId);
+
+    } catch (error: any) {
+      console.error('Failed to delete suggestion:', error);
+      const userMessage = getUserFriendlyErrorMessage(error, 'delete');
+      setState(prev => ({ ...prev, error: userMessage }));
     }
-  }, [state.allSuggestions]);
+  }, [state.allSuggestions, config.postId, optimizedState, optimisticResolution]);
 
   /**
    * Undo the most recent suggestion acceptance
@@ -363,6 +500,87 @@ export function useSuggestionManager(
   }, []);
 
   /**
+   * Batch resolve multiple suggestions efficiently
+   */
+  const batchResolveSuggestions = useCallback(async (
+    resolutions: Array<{ suggestionId: string; action: 'accepted' | 'rejected' | 'deleted' }>
+  ) => {
+    if (!config.postId) {
+      console.error('Post ID is required for suggestion actions');
+      const errorMessage = 'Unable to resolve suggestions. Please save your post first and try again.';
+      setState(prev => ({ ...prev, error: errorMessage }));
+      return;
+    }
+
+    try {
+      // Apply content changes for accepted suggestions first
+      let newContent = content;
+      const acceptedResolutions = resolutions.filter(r => r.action === 'accepted');
+
+      for (const resolution of acceptedResolutions) {
+        const suggestion = state.allSuggestions.find(s => s.id === resolution.suggestionId);
+        if (suggestion) {
+          newContent = suggestionService.applySuggestion(newContent, suggestion);
+        }
+      }
+
+      // Update content if there were accepted suggestions
+      if (acceptedResolutions.length > 0) {
+        onContentChange(newContent);
+      }
+
+      // Update local state optimistically for all resolutions
+      setState(prev => {
+        let newAccepted = [...prev.acceptedSuggestions];
+        let newRejected = [...prev.rejectedSuggestions];
+        let newAllSuggestions = [...prev.allSuggestions];
+
+        resolutions.forEach(({ suggestionId, action }) => {
+          // Remove from all arrays first
+          newAccepted = newAccepted.filter(id => id !== suggestionId);
+          newRejected = newRejected.filter(id => id !== suggestionId);
+
+          switch (action) {
+            case 'accepted':
+              newAccepted.push(suggestionId);
+              break;
+            case 'rejected':
+              newRejected.push(suggestionId);
+              break;
+            case 'deleted':
+              newAllSuggestions = newAllSuggestions.filter(s => s.id !== suggestionId);
+              break;
+          }
+        });
+
+        return {
+          ...prev,
+          acceptedSuggestions: newAccepted,
+          rejectedSuggestions: newRejected,
+          allSuggestions: newAllSuggestions,
+          error: null
+        };
+      });
+
+      // Update optimized state in batch
+      optimizedState.batchMarkSuggestions(resolutions);
+
+      // Use optimistic resolution for backend updates
+      optimisticResolution.batchResolveSuggestions(config.postId, resolutions);
+
+      // Call success callback for each resolution
+      resolutions.forEach(({ suggestionId, action }) => {
+        config.onSuccess?.(action, suggestionId);
+      });
+
+    } catch (error: any) {
+      console.error('Failed to batch resolve suggestions:', error);
+      const userMessage = getUserFriendlyErrorMessage(error, 'resolve');
+      setState(prev => ({ ...prev, error: userMessage }));
+    }
+  }, [state.allSuggestions, content, onContentChange, config.postId, optimizedState, optimisticResolution]);
+
+  /**
    * Clear persisted state
    */
   const clearPersistedState = useCallback(() => {
@@ -374,34 +592,39 @@ export function useSuggestionManager(
   }, [persistenceKey]);
 
   /**
-   * Get filtered suggestions (excluding accepted/rejected) - memoized to prevent re-calculations
+   * Get filtered suggestions (excluding accepted/rejected) - using optimized state
    */
   const activeSuggestions = useMemo(() => {
+    // Use optimized state if available, fallback to legacy calculation
+    if (optimizedState.activeSuggestions.length > 0 || state.allSuggestions.length === 0) {
+      return optimizedState.activeSuggestions;
+    }
+
     return state.allSuggestions.filter(
       suggestion =>
         !state.acceptedSuggestions.includes(suggestion.id) &&
         !state.rejectedSuggestions.includes(suggestion.id)
     );
-  }, [state.allSuggestions, state.acceptedSuggestions, state.rejectedSuggestions]);
+  }, [optimizedState.activeSuggestions, state.allSuggestions, state.acceptedSuggestions, state.rejectedSuggestions]);
 
   /**
-   * Get suggestion statistics - memoized to prevent re-calculations
+   * Get suggestion statistics - using optimized state for better performance
    */
   const stats = useMemo(() => {
+    // Use optimized state stats if available
+    const optimizedStats = optimizedState.stats;
+
     return {
-      total: activeSuggestions.length,
-      accepted: state.acceptedSuggestions.length,
-      rejected: state.rejectedSuggestions.length,
+      total: optimizedStats.active,
+      accepted: optimizedStats.accepted,
+      rejected: optimizedStats.rejected,
       canUndo: state.undoHistory.length > 0,
-      byType: {
-        llm: activeSuggestions.filter(s => s.type === 'llm').length,
-        brand: activeSuggestions.filter(s => s.type === 'brand').length,
-        fact: activeSuggestions.filter(s => s.type === 'fact').length,
-        grammar: activeSuggestions.filter(s => s.type === 'grammar').length,
-        spelling: activeSuggestions.filter(s => s.type === 'spelling').length
-      }
+      byType: optimizedStats.byType,
+      // Additional stats from optimistic resolution
+      pending: optimisticResolution.optimisticResolutions.filter(r => r.isOptimistic).length,
+      failed: optimisticResolution.optimisticResolutions.filter(r => r.error && !r.isOptimistic).length
     };
-  }, [activeSuggestions, state.acceptedSuggestions, state.rejectedSuggestions, state.undoHistory]);
+  }, [optimizedState.stats, state.undoHistory, optimisticResolution.optimisticResolutions]);
 
   // Memoize hasActiveSuggestions to prevent re-calculations
   const hasActiveSuggestions = useMemo(() => activeSuggestions.length > 0, [activeSuggestions.length]);
@@ -435,6 +658,8 @@ export function useSuggestionManager(
     loadSuggestions,
     acceptSuggestion,
     rejectSuggestion,
+    deleteSuggestion,
+    batchResolveSuggestions, // New batch resolution method
     undoLastAcceptance,
     undoAcceptance,
     clearUndoHistory,
@@ -444,6 +669,20 @@ export function useSuggestionManager(
     // Computed values
     stats,
     canUndo: state.undoHistory.length > 0,
-    hasActiveSuggestions
+    hasActiveSuggestions,
+
+    // Enhanced state access
+    optimizedState: {
+      suggestionsByType: optimizedState.suggestionsByType,
+      isSuggestionInState: optimizedState.isSuggestionInState,
+      getSuggestionsByState: optimizedState.getSuggestionsByState
+    },
+
+    // Optimistic resolution access
+    optimisticResolution: {
+      isOptimisticallyResolved: optimisticResolution.isOptimisticallyResolved,
+      getOptimisticResolution: optimisticResolution.getOptimisticResolution,
+      getQueueStats: optimisticResolution.getQueueStats
+    }
   };
 }

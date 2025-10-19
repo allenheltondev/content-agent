@@ -7,7 +7,7 @@ import { useProfile } from '../hooks/useProfile';
 import { useProfileContext } from '../contexts/ProfileContext';
 import { AppHeader } from '../components/common';
 import { ProfileErrorBoundary, ProfileErrorDisplay, ProfileOperationLoading } from '../components/profile';
-import type { UserProfile, UpdateProfileRequest } from '../types';
+import type { UpdateProfileRequest } from '../types';
 
 // Predefined topic options (same as ProfileSetupPage)
 const PREDEFINED_TOPICS = [
@@ -256,7 +256,7 @@ const ProfilePageContent = () => {
             <div className="min-w-0">
               <h1 className="text-2xl sm:text-3xl font-bold text-tertiary">Profile Settings</h1>
               <p className="mt-2 text-sm sm:text-base text-gray-600">
-                Update your writing preferences to get better AI suggestions
+                Update your writing preferences to get better writing improvements
               </p>
             </div>
             <button

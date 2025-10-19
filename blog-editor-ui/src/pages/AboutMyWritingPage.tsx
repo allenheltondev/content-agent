@@ -5,6 +5,7 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorDisplay } from '../components/common/ErrorDisplay';
 import { useApi } from '../hooks/useApi';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { apiService } from '../services';
 import type { StatsResponse, SuggestionType } from '../types';
 
 // Color mapping for suggestion types
@@ -53,7 +54,6 @@ export const AboutMyWritingPage: React.FC = () => {
   usePageTitle('About My Writing');
 
   const fetchStats = async () => {
-    const { apiService } = await import('../services');
     await execute(
       (signal) => apiService.getStats(signal),
       {
@@ -73,7 +73,7 @@ export const AboutMyWritingPage: React.FC = () => {
 
   const formatSuggestionTypeName = (type: SuggestionType): string => {
     const names: Record<SuggestionType, string> = {
-      llm: 'AI Suggestions',
+      llm: 'Writing Enhancements',
       brand: 'Brand Guidelines',
       fact: 'Fact Checking',
       grammar: 'Grammar',

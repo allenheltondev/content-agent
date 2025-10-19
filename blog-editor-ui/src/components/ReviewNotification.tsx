@@ -132,7 +132,7 @@ export const ReviewNotification: React.FC<ReviewNotificationProps> = ({
 
 // Container component for managing multiple notifications
 interface ReviewNotificationContainerProps {
-  notifications: ReviewNotification[];
+  notifications: ReviewNotificationType[];
   onDismiss: (id: string) => void;
 }
 

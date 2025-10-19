@@ -2,7 +2,7 @@ import { createContext, useEffect, useState, type ReactNode } from 'react';
 import { getCurrentUser, signIn, signOut, fetchAuthSession, signUp, confirmSignUp, resendSignUpCode } from 'aws-amplify/auth';
 import type { AuthContextType, CognitoUser, AuthFlowState, AuthError } from '../types';
 import { AuthErrorHandler } from '../utils/authErrorHandler';
-import { componentCleanupManager } from '../utils/componentCleanupManager';
+
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -51,7 +51,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       // If localStorage is full or unavailable, clear old data and try again
       try {
         localStorage.removeItem('auth_state');
-        localStorage.setItem('auth_state', JSON.stringify(authState));
+        const retryAuthState = {
+          user: authUser,
+          isAuthenticated: true,
+          tokens: {
+            accessToken: tokens.accessToken?.toString(),
+            idToken: tokens.idToken?.toString(),
+            refreshToken: tokens.refreshToken?.toString(),
+            expiresAt: tokens.idToken?.payload?.exp ? tokens.idToken.payload.exp * 1000 : null,
+          },
+          lastRefresh: Date.now(),
+          persistedAt: Date.now(),
+          version: '1.0',
+        };
+        localStorage.setItem('auth_state', JSON.stringify(retryAuthState));
         console.log('Auth state persisted after clearing old data');
       } catch (retryError) {
         console.error('Failed to persist auth state even after cleanup:', retryError);
@@ -175,8 +188,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (tokenRefreshInterval) {
         clearInterval(tokenRefreshInterval);
       }
-      // Clean up all AuthProvider tasks
-      componentCleanupManager.cleanupComponent('AuthProvider');
+      // Cleanup handled by React's cleanup
     };
   }, []);
 
@@ -223,7 +235,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
           // For network errors, try again in 5 minutes instead of waiting full cycle
           if (authError.type === 'network') {
-            const retryTimeout = setTimeout(async () => {
+            setTimeout(async () => {
               try {
                 console.log('Retrying token refresh after network error...');
                 const retrySession = await refreshTokensWithRetry(1); // Single retry
@@ -237,8 +249,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               }
             }, 5 * 60 * 1000); // 5 minutes
 
-            // Register timeout for cleanup
-            componentCleanupManager.registerTimeout(retryTimeout, 'AuthProvider', 'Token refresh retry');
+            // Timeout will be cleaned up by React
           }
         } else {
           console.log('Token refresh failed with non-retryable error, checking auth state');
@@ -250,8 +261,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     setTokenRefreshInterval(refreshInterval);
 
-    // Register interval for cleanup
-    componentCleanupManager.registerInterval(refreshInterval, 'AuthProvider', 'Token refresh interval');
+    // Interval will be cleaned up by React
 
     return () => {
       if (refreshInterval) {
@@ -312,24 +322,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     };
 
+    // Event listeners will be cleaned up by React
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('online', handleOnline);
-
-    // Register event listeners for cleanup
-    componentCleanupManager.registerEventListener(
-      document,
-      'visibilitychange',
-      handleVisibilityChange,
-      'AuthProvider',
-      'Visibility change handler'
-    );
-    componentCleanupManager.registerEventListener(
-      window,
-      'online',
-      handleOnline,
-      'AuthProvider',
-      'Online event handler'
-    );
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);

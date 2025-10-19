@@ -76,7 +76,7 @@ export const KEYBOARD_KEYS = {
  * Check if color contrast meets WCAG AA standards
  * This is a simplified check - in production, use a proper contrast checking library
  */
-export const checkColorContrast = (foreground: string, background: string): boolean => {
+export const checkColorContrast = (_foreground: string, _background: string): boolean => {
   // This is a placeholder - implement proper contrast checking
   // For now, we'll assume our predefined color combinations meet standards
   return true;

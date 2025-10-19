@@ -77,7 +77,7 @@ export const UndoNotification = ({
 
   const getSuggestionTypeName = (type: string) => {
     const nameMap = {
-      llm: 'AI Suggestion',
+      llm: 'Writing Enhancement',
       brand: 'Brand Guidelines',
       fact: 'Fact Check',
       grammar: 'Grammar',

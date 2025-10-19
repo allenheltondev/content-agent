@@ -343,6 +343,7 @@ export const useAsyncReview = (options: UseAsyncReviewOptions) => {
 
     let errorMessage: string;
     let retryable = true;
+    let suppressUiNotification = false;
 
     // Handle enhanced error types from the service
     if ('code' in error) {
@@ -363,8 +364,12 @@ export const useAsyncReview = (options: UseAsyncReviewOptions) => {
           retryable = false;
           break;
         case 'ACCESS_DENIED':
-          errorMessage = 'Access denied to review updates. Please start a new review.';
+          // Special handling for 403 subscribe failures: avoid UI churn and guide manual refresh
+          errorMessage = 'Live update subscription failed (403). Please refresh the page in about a minute to see results.';
           retryable = false;
+          suppressUiNotification = true;
+          // Log a clear console warning per UX guidance
+          console.warn('[Review] Subscribe endpoint returned 403. Live updates disabled. Manually refresh after ~1 minute.');
           break;
         case 'SESSION_NOT_FOUND':
           errorMessage = 'Review session not found or expired. Please start a new review.';
@@ -422,16 +427,19 @@ export const useAsyncReview = (options: UseAsyncReviewOptions) => {
       }
     }
 
-    addNotification({
-      type: 'error',
-      message: errorMessage,
-      // Only show retry if the error is retryable and we have a current review context
-      onRetry: retryable && currentReviewId ? () => {
-        // For polling errors, we typically need to restart the entire review
-        // since the polling session is broken
-        console.warn('Polling retry would require restarting review - not implemented');
-      } : undefined
-    });
+    // For 403 subscribe failures, skip showing an in-app notification to prevent UI jumping
+    if (!suppressUiNotification) {
+      addNotification({
+        type: 'error',
+        message: errorMessage,
+        // Only show retry if the error is retryable and we have a current review context
+        onRetry: retryable && currentReviewId ? () => {
+          // For polling errors, we typically need to restart the entire review
+          // since the polling session is broken
+          console.warn('Polling retry would require restarting review - not implemented');
+        } : undefined
+      });
+    }
 
     options.onReviewError?.(errorMessage);
   }, [addNotification, options, currentReviewId]);

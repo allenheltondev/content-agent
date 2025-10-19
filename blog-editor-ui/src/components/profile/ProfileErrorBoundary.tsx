@@ -1,6 +1,5 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 import { requiresReauth, isRetryableError, getErrorMessage, logError } from '../../utils/apiErrorHandler';
-import type { ApiError } from '../../types';
 
 interface Props {
   children: ReactNode;

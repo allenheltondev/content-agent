@@ -87,10 +87,10 @@ function setupGlobalErrorHandlers(): void {
 
     ErrorReportingManager.reportError(
       new Error(event.reason?.message || 'Unhandled promise rejection'),
-      { source: 'unhandledrejection' },
+      {},
       'medium',
       'unknown',
-      { reason: event.reason }
+      { reason: event.reason, source: 'unhandledrejection' }
     );
   });
 
@@ -100,15 +100,11 @@ function setupGlobalErrorHandlers(): void {
 
     ErrorReportingManager.reportError(
       event.error || new Error(event.message),
-      {
-        source: 'global',
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno
-      },
+      {},
       'high',
       'unknown',
       {
+        source: 'global',
         filename: event.filename,
         lineno: event.lineno,
         colno: event.colno

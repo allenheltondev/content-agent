@@ -172,7 +172,7 @@ export const SubmitButton = ({
       await submitForReview(currentPostId);
 
       // 3. Show success message
-      showSuccess('Post submitted for review successfully! You\'ll receive AI suggestions shortly.');
+      showSuccess('Post submitted for review successfully! You\'ll receive writing improvements shortly.');
 
       // 4. Redirect to dashboard if requested
       if (redirectToDashboard) {

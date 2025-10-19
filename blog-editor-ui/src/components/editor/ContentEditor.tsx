@@ -109,7 +109,7 @@ export const ContentEditor = memo(({
             <ul className="space-y-1 text-xs sm:text-sm">
               <li>• Use Cmd/Ctrl + S to save your work</li>
               <li>• Your content is automatically saved as you type</li>
-              <li className="hidden sm:list-item">• AI suggestions will appear when you edit existing posts</li>
+              <li className="hidden sm:list-item">• Writing improvements will appear when you edit existing posts</li>
               <li className="hidden sm:list-item">• Use Tab to indent text</li>
             </ul>
           </div>

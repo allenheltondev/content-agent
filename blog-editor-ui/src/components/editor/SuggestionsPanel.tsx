@@ -1,7 +1,15 @@
-import { useState, useCallback, useMemo, memo } from 'react';
+import { useState, useCallback, useMemo, memo, useRef, useEffect } from 'react';
 import type { Suggestion, SuggestionType } from '../../types';
 import { apiService } from '../../services/ApiService';
 import { useToast } from '../../hooks/useToast';
+import { useOptimizedSuggestionList } from '../../hooks/useVirtualizedList';
+import {
+  getSuggestionAccessibleLabel,
+  getSuggestionActionLabel,
+  getSuggestionStateAnnouncement,
+  announceToScreenReader,
+  SuggestionFocusManager
+} from '../../utils/suggestionAccessibility';
 
 interface SuggestionsPanelProps {
   suggestions: Suggestion[];
@@ -11,44 +19,49 @@ interface SuggestionsPanelProps {
   onDelete: (id: string) => void;
   isLoading?: boolean;
   className?: string;
+  expandedSuggestion?: string;
+  onExpandSuggestion: (id: string | null) => void;
 }
 
 
 
 /**
- * Get color classes for suggestion type with consistent styling
+ * Get color classes for suggestion type with accessible styling
  */
 const getSuggestionColors = (type: SuggestionType) => {
+  // Use accessible colors that meet WCAG AA standards
+  // const accessibleColors = getAccessibleSuggestionColors(type);
+
   const colorMap = {
     llm: {
-      bg: 'bg-blue-200',
-      border: 'border-blue-400',
-      text: 'text-blue-700',
-      badge: 'bg-blue-100 text-blue-800'
+      bg: 'bg-blue-50',
+      border: 'border-blue-600',
+      text: 'text-blue-900',
+      badge: 'bg-blue-100 text-blue-900'
     },
     brand: {
-      bg: 'bg-purple-200',
-      border: 'border-purple-400',
-      text: 'text-purple-700',
-      badge: 'bg-purple-100 text-purple-800'
+      bg: 'bg-purple-50',
+      border: 'border-purple-600',
+      text: 'text-purple-900',
+      badge: 'bg-purple-100 text-purple-900'
     },
     fact: {
-      bg: 'bg-orange-200',
-      border: 'border-orange-400',
-      text: 'text-orange-700',
-      badge: 'bg-orange-100 text-orange-800'
+      bg: 'bg-orange-50',
+      border: 'border-orange-600',
+      text: 'text-orange-900',
+      badge: 'bg-orange-100 text-orange-900'
     },
     grammar: {
-      bg: 'bg-green-200',
-      border: 'border-green-400',
-      text: 'text-green-700',
-      badge: 'bg-green-100 text-green-800'
+      bg: 'bg-green-50',
+      border: 'border-green-600',
+      text: 'text-green-900',
+      badge: 'bg-green-100 text-green-900'
     },
     spelling: {
-      bg: 'bg-red-200',
-      border: 'border-red-400',
-      text: 'text-red-700',
-      badge: 'bg-red-100 text-red-800'
+      bg: 'bg-red-50',
+      border: 'border-red-600',
+      text: 'text-red-900',
+      badge: 'bg-red-100 text-red-900'
     }
   };
 
@@ -60,7 +73,7 @@ const getSuggestionColors = (type: SuggestionType) => {
  */
 const getTypeDisplayName = (type: SuggestionType): string => {
   const nameMap = {
-    llm: 'AI Suggestion',
+    llm: 'Writing Enhancement',
     brand: 'Brand Guidelines',
     fact: 'Fact Check',
     grammar: 'Grammar',
@@ -97,22 +110,10 @@ const getPriorityIcon = (priority: string) => {
 };
 
 /**
- * Group suggestions by type
+ * Sort suggestions by content position (startOffset)
  */
-const groupSuggestionsByType = (suggestions: Suggestion[]): Record<SuggestionType, Suggestion[]> => {
-  const groups: Record<SuggestionType, Suggestion[]> = {
-    llm: [],
-    brand: [],
-    fact: [],
-    grammar: [],
-    spelling: []
-  };
-
-  suggestions.forEach(suggestion => {
-    groups[suggestion.type].push(suggestion);
-  });
-
-  return groups;
+const sortSuggestionsByPosition = (suggestions: Suggestion[]): Suggestion[] => {
+  return [...suggestions].sort((a, b) => a.startOffset - b.startOffset);
 };
 
 /**
@@ -125,21 +126,42 @@ export const SuggestionsPanel = memo(({
   onReject,
   onDelete,
   isLoading = false,
-  className = ''
+  className = '',
+  expandedSuggestion,
+  onExpandSuggestion
 }: SuggestionsPanelProps) => {
-  const [expandedSuggestions, setExpandedSuggestions] = useState<Set<string>>(new Set());
   const [processingActions, setProcessingActions] = useState<Set<string>>(new Set());
   const { showSuccess, showError } = useToast();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const focusManagerRef = useRef<SuggestionFocusManager | null>(null);
+
+  // Initialize focus manager
+  useEffect(() => {
+    if (containerRef.current) {
+      focusManagerRef.current = new SuggestionFocusManager(containerRef.current);
+    }
+  }, []);
+
+  // Performance optimization for large lists
+  const { shouldVirtualize, visibleItems, totalHeight } = useOptimizedSuggestionList(
+    suggestions,
+    containerRef as React.RefObject<HTMLDivElement>
+  );
 
   const toggleExpanded = useCallback((suggestionId: string) => {
-    const newExpanded = new Set(expandedSuggestions);
-    if (newExpanded.has(suggestionId)) {
-      newExpanded.delete(suggestionId);
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (!suggestion) return;
+
+    const wasExpanded = expandedSuggestion === suggestionId;
+
+    if (wasExpanded) {
+      onExpandSuggestion(null);
+      announceToScreenReader(getSuggestionStateAnnouncement('collapsed', suggestion));
     } else {
-      newExpanded.add(suggestionId);
+      onExpandSuggestion(suggestionId);
+      announceToScreenReader(getSuggestionStateAnnouncement('expanded', suggestion));
     }
-    setExpandedSuggestions(newExpanded);
-  }, [expandedSuggestions]);
+  }, [expandedSuggestion, onExpandSuggestion, suggestions]);
 
   const getContextText = useCallback((suggestion: Suggestion) => {
     const { startOffset, endOffset } = suggestion;
@@ -169,6 +191,9 @@ export const SuggestionsPanel = memo(({
       return; // Prevent duplicate actions
     }
 
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (!suggestion) return;
+
     setProcessingActions(prev => new Set(prev).add(suggestionId));
 
     try {
@@ -182,9 +207,13 @@ export const SuggestionsPanel = memo(({
       const actionText = action === 'accepted' ? 'applied' : action === 'rejected' ? 'rejected' : 'deleted';
       showSuccess(`Suggestion ${actionText} successfully`);
 
+      // Announce to screen readers
+      announceToScreenReader(getSuggestionStateAnnouncement(action, suggestion), 'assertive');
+
     } catch (error) {
       console.error(`Failed to ${action} suggestion:`, error);
       showError(`Failed to ${action} suggestion. Please try again.`);
+      announceToScreenReader(`Failed to ${action} suggestion. Please try again.`, 'assertive');
     } finally {
       setProcessingActions(prev => {
         const newSet = new Set(prev);
@@ -192,17 +221,23 @@ export const SuggestionsPanel = memo(({
         return newSet;
       });
     }
-  }, [processingActions, showSuccess, showError]);
+  }, [processingActions, showSuccess, showError, suggestions]);
 
-  // Group suggestions by type for better organization - memoized to prevent re-calculations
-  const groupedSuggestions = useMemo(() => groupSuggestionsByType(suggestions), [suggestions]);
+  // Sort suggestions by position for better organization - memoized to prevent re-calculations
+  const sortedSuggestions = useMemo(() => sortSuggestionsByPosition(suggestions), [suggestions]);
 
   if (isLoading) {
     return (
-      <div className={`bg-white border border-gray-200 rounded-lg p-4 ${className}`}>
-        <div className="flex items-center space-x-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-          <span className="text-sm text-gray-600">Loading suggestions...</span>
+      <div className={`bg-white border border-gray-200 rounded-lg p-4 animate-fade-in ${className}`}>
+        <div className="flex items-center space-x-3">
+          <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>
+          <span className="text-sm text-gray-600 animate-pulse-soft">Loading writing improvements...</span>
+        </div>
+        {/* Loading skeleton */}
+        <div className="mt-4 space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className={`loading-shimmer rounded-lg h-16 animate-fade-in stagger-${i}`}></div>
+          ))}
         </div>
       </div>
     );
@@ -210,171 +245,284 @@ export const SuggestionsPanel = memo(({
 
   if (suggestions.length === 0) {
     return (
-      <div className={`text-center py-8 text-gray-500 ${className}`}>
-        <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <p>No suggestions available</p>
-        <p className="text-sm text-gray-400 mt-1">Submit your post for review to get AI-powered suggestions</p>
+      <div className={`text-center py-8 text-gray-500 animate-fade-in ${className}`}>
+        <div className="animate-bounce-subtle">
+          <svg className="w-12 h-12 mx-auto mb-4 text-gray-300 transition-colors duration-300 hover:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <p className="font-medium animate-slide-up">No writing improvements available</p>
+        <p className="text-sm text-gray-400 mt-1 animate-slide-up stagger-1">Submit your post for review to get personalized writing suggestions</p>
       </div>
     );
   }
 
   return (
-    <div className={`space-y-4 ${className}`}>
+    <div
+      ref={containerRef}
+      className={`space-y-2 ${className}`}
+      role="region"
+      aria-label="Writing improvements"
+      aria-describedby="suggestions-instructions"
+    >
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium text-gray-900">
-          AI Suggestions ({suggestions.length})
+          Writing Improvements ({suggestions.length})
         </h3>
         <div className="text-sm text-gray-500">
-          Click suggestions to expand details
+          Click to expand details
         </div>
       </div>
 
-      {/* Render suggestions grouped by type */}
-      {Object.entries(groupedSuggestions).map(([type, typeSuggestions]) => {
-        if (typeSuggestions.length === 0) return null;
+      {/* Screen reader instructions */}
+      <div id="suggestions-instructions" className="sr-only">
+        Use Tab to navigate between suggestions, Enter or Space to expand or collapse suggestions, and arrow keys to navigate within expanded suggestions.
+      </div>
 
-        const suggestionType = type as SuggestionType;
-        const colors = getSuggestionColors(suggestionType);
+      {/* Render suggestions sorted by position */}
+      <div
+        className="space-y-2"
+        style={shouldVirtualize ? { height: Math.min(totalHeight, 600), overflow: 'auto' } : undefined}
+      >
+        {(shouldVirtualize ? visibleItems.map(({ item: suggestion, style }) => ({ suggestion, style })) : sortedSuggestions.map(suggestion => ({ suggestion, style: {} }))).map(({ suggestion, style }) => {
+          const isExpanded = expandedSuggestion === suggestion.id;
+          const isProcessing = processingActions.has(suggestion.id);
+          const colors = getSuggestionColors(suggestion.type);
+          const context = getContextText(suggestion);
 
-        return (
-          <div key={type} className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <div className={`w-3 h-3 rounded-full ${colors.bg} ${colors.border} border`}></div>
-              <h4 className="text-sm font-medium text-gray-700">
-                {getTypeDisplayName(suggestionType)} ({typeSuggestions.length})
-              </h4>
-            </div>
+          return (
+            <div
+              key={suggestion.id}
+              style={style}
+              className={`border rounded-lg transition-all duration-300 ease-out cursor-pointer hover-lift focus-ring ${colors.border} ${colors.bg} ${
+                isExpanded ? 'p-4 shadow-lg ring-2 ring-opacity-20' : 'p-3 hover:shadow-md'
+              } ${isExpanded ? `ring-${colors.border.split('-')[1]}-400` : ''}`}
+              onClick={() => toggleExpanded(suggestion.id)}
+              tabIndex={0}
+              role="button"
+              aria-expanded={isExpanded}
+              aria-label={getSuggestionAccessibleLabel(suggestion)}
+              data-suggestion-id={suggestion.id}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleExpanded(suggestion.id);
+                } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  // Handle arrow key navigation
+                  const currentIndex = sortedSuggestions.findIndex(s => s.id === suggestion.id);
+                  const nextIndex = e.key === 'ArrowDown'
+                    ? Math.min(currentIndex + 1, sortedSuggestions.length - 1)
+                    : Math.max(currentIndex - 1, 0);
 
-            <div className="space-y-3 ml-5">
-              {typeSuggestions.map((suggestion) => {
-                const isExpanded = expandedSuggestions.has(suggestion.id);
-                const isProcessing = processingActions.has(suggestion.id);
-                const context = getContextText(suggestion);
-
-                return (
-                  <div
-                    key={suggestion.id}
-                    className={`border rounded-lg p-4 transition-all duration-200 ${colors.border} ${colors.bg}`}
-                  >
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center space-x-2 min-w-0 flex-1">
+                  if (focusManagerRef.current && sortedSuggestions[nextIndex]) {
+                    focusManagerRef.current.focusSuggestion(sortedSuggestions[nextIndex].id);
+                  }
+                }
+              }}
+            >
+              {/* Compact view */}
+              {!isExpanded && (
+                <div className="flex items-center justify-between animate-fade-in">
+                  <div className="flex items-center space-x-3 min-w-0 flex-1">
+                    <div className="flex items-center space-x-2">
+                      <div className="transition-transform duration-200 hover:scale-110">
                         {getPriorityIcon(suggestion.priority)}
-                        <span className={`text-sm font-medium ${colors.text}`}>
-                          {getTypeDisplayName(suggestion.type)}
-                        </span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${colors.badge}`}>
-                          {suggestion.priority} priority
-                        </span>
                       </div>
-
-                      <button
-                        onClick={() => toggleExpanded(suggestion.id)}
-                        className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                        aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                        disabled={isProcessing}
-                      >
-                        <svg
-                          className={`w-5 h-5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
+                      <span className={`text-sm font-medium transition-colors duration-200 ${colors.text}`}>
+                        {getTypeDisplayName(suggestion.type)}
+                      </span>
                     </div>
-
-                    {/* Content preview */}
-                    <div className="mb-3">
-                      <div className="text-sm text-gray-700 mb-2">
-                        <span className="font-medium">Change:</span>
-                      </div>
-                      <div className="bg-white rounded p-3 border border-gray-200">
-                        <div className="text-sm font-mono">
-                          <span className="line-through text-gray-500">"{suggestion.textToReplace}"</span>
-                          <span className="mx-2 text-gray-400">→</span>
-                          <span className={`font-medium ${colors.text}`}>"{suggestion.replaceWith}"</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Expanded content */}
-                    {isExpanded && (
-                      <div className="space-y-3 border-t border-gray-200 pt-3">
-                        {/* Context */}
-                        <div>
-                          <div className="text-sm font-medium text-gray-700 mb-2">Context:</div>
-                          <div className="bg-white rounded p-3 border border-gray-200">
-                            <div className="text-sm font-mono text-gray-600">
-                              {context.before}
-                              <span className="bg-yellow-200 px-1 rounded">{context.highlight}</span>
-                              {context.after}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Reason */}
-                        {suggestion.reason && (
-                          <div>
-                            <div className="text-sm font-medium text-gray-700 mb-2">Reason:</div>
-                            <div className="text-sm text-gray-600">
-                              {suggestion.reason}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Metadata */}
-                        <div className="text-xs text-gray-500 space-y-1">
-                          <div>Position: {suggestion.startOffset}-{suggestion.endOffset}</div>
-                          <div>Created: {new Date(suggestion.createdAt).toLocaleString()}</div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Actions with real-time status updates */}
-                    <div className="flex gap-3 mt-4">
-                      <button
-                        onClick={() => handleSuggestionAction(suggestion.id, suggestion.contentId, 'accepted', onAccept)}
-                        disabled={isProcessing}
-                        className="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isProcessing ? (
-                          <div className="flex items-center justify-center">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Processing...
-                          </div>
-                        ) : (
-                          'Accept Change'
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleSuggestionAction(suggestion.id, suggestion.contentId, 'rejected', onReject)}
-                        disabled={isProcessing}
-                        className="flex-1 px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Reject
-                      </button>
-                      <button
-                        onClick={() => handleSuggestionAction(suggestion.id, suggestion.contentId, 'deleted', onDelete)}
-                        disabled={isProcessing}
-                        className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Delete suggestion"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                    <div className="text-sm text-gray-600 truncate transition-colors duration-200 hover:text-gray-800">
+                      "<span className="font-medium">{suggestion.textToReplace}</span>" → "<span className={`font-medium ${colors.text}`}>{suggestion.replaceWith}</span>"
                     </div>
                   </div>
-                );
-              })}
+                  <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSuggestionAction(suggestion.id, suggestion.contentId, 'accepted', onAccept);
+                      }}
+                      disabled={isProcessing}
+                      className="inline-flex items-center justify-center w-7 h-7 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 hover:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 transition-all duration-200 button-press hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                      title="Accept suggestion"
+                      aria-label={getSuggestionActionLabel('accept', suggestion)}
+                    >
+                      {isProcessing ? (
+                        <div className="animate-spin w-3.5 h-3.5 border border-emerald-700 border-t-transparent rounded-full"></div>
+                      ) : (
+                        <svg className="w-3.5 h-3.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSuggestionAction(suggestion.id, suggestion.contentId, 'rejected', onReject);
+                      }}
+                      disabled={isProcessing}
+                      className="inline-flex items-center justify-center w-7 h-7 bg-slate-50 text-slate-600 border border-slate-200 rounded-md hover:bg-slate-100 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-1 transition-all duration-200 button-press hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                      title="Reject suggestion"
+                      aria-label={getSuggestionActionLabel('reject', suggestion)}
+                    >
+                      {isProcessing ? (
+                        <div className="animate-spin w-3.5 h-3.5 border border-slate-600 border-t-transparent rounded-full"></div>
+                      ) : (
+                        <svg className="w-3.5 h-3.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSuggestionAction(suggestion.id, suggestion.contentId, 'deleted', onDelete);
+                      }}
+                      disabled={isProcessing}
+                      className="inline-flex items-center justify-center w-7 h-7 bg-red-50 text-red-600 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 transition-all duration-200 button-press hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                      title="Delete suggestion"
+                      aria-label={getSuggestionActionLabel('delete', suggestion)}
+                    >
+                      {isProcessing ? (
+                        <div className="animate-spin w-3.5 h-3.5 border border-red-600 border-t-transparent rounded-full"></div>
+                      ) : (
+                        <svg className="w-3.5 h-3.5 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Expanded view */}
+              {isExpanded && (
+                <div className="space-y-4 animate-slide-up expand-enter">
+                  {/* Header */}
+                  <div className="flex items-start justify-between animate-fade-in">
+                    <div className="flex items-center space-x-2 min-w-0 flex-1">
+                      <div className="transition-transform duration-200 hover:scale-110">
+                        {getPriorityIcon(suggestion.priority)}
+                      </div>
+                      <span className={`text-sm font-medium transition-colors duration-200 ${colors.text}`}>
+                        {getTypeDisplayName(suggestion.type)}
+                      </span>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full transition-all duration-200 hover:scale-105 ${colors.badge}`}>
+                        {suggestion.priority} priority
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Content preview */}
+                  <div className="animate-fade-in stagger-1">
+                    <div className="text-sm text-gray-700 mb-2">
+                      <span className="font-medium">Change:</span>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-gray-200 transition-all duration-200 hover:border-gray-300 hover:shadow-sm">
+                      <div className="text-sm font-mono">
+                        <span className="line-through text-gray-500 transition-colors duration-200">"{suggestion.textToReplace}"</span>
+                        <span className="mx-2 text-gray-400 transition-transform duration-300 inline-block hover:scale-110">→</span>
+                        <span className={`font-medium transition-colors duration-200 ${colors.text}`}>"{suggestion.replaceWith}"</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Context */}
+                  <div className="animate-fade-in stagger-2">
+                    <div className="text-sm font-medium text-gray-700 mb-2">Context:</div>
+                    <div className="bg-white rounded-lg p-3 border border-gray-200 transition-all duration-200 hover:border-gray-300 hover:shadow-sm">
+                      <div className="text-sm font-mono text-gray-600">
+                        {context.before}
+                        <span className="bg-yellow-200 px-1 rounded transition-all duration-200 hover:bg-yellow-300">{context.highlight}</span>
+                        {context.after}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reason */}
+                  {suggestion.reason && (
+                    <div className="animate-fade-in stagger-3">
+                      <div className="text-sm font-medium text-gray-700 mb-2">Reason:</div>
+                      <div className="text-sm text-gray-600 transition-colors duration-200 hover:text-gray-800">
+                        {suggestion.reason}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions with real-time status updates */}
+                  <div className="flex gap-2 animate-fade-in stagger-4">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSuggestionAction(suggestion.id, suggestion.contentId, 'accepted', onAccept);
+                      }}
+                      disabled={isProcessing}
+                      className="flex-1 inline-flex items-center justify-center px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all duration-200 button-press hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-sm hover:shadow-md"
+                      aria-label={getSuggestionActionLabel('accept', suggestion)}
+                    >
+                      {isProcessing ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+                          Processing...
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <svg className="w-4 h-4 mr-2 transition-transform duration-200 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Accept
+                        </div>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSuggestionAction(suggestion.id, suggestion.contentId, 'rejected', onReject);
+                      }}
+                      disabled={isProcessing}
+                      className="flex-1 inline-flex items-center justify-center px-4 py-2.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-all duration-200 button-press hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 hover:shadow-sm"
+                      aria-label={getSuggestionActionLabel('reject', suggestion)}
+                    >
+                      {isProcessing ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-700 border-t-transparent mr-2"></div>
+                          Processing...
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <svg className="w-4 h-4 mr-2 transition-transform duration-200 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Reject
+                        </div>
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSuggestionAction(suggestion.id, suggestion.contentId, 'deleted', onDelete);
+                      }}
+                      disabled={isProcessing}
+                      className="inline-flex items-center justify-center px-3 py-2.5 bg-red-50 text-red-600 text-sm font-medium rounded-lg border border-red-200 hover:bg-red-100 hover:border-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 button-press hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 hover:shadow-sm"
+                      title="Delete suggestion"
+                      aria-label={getSuggestionActionLabel('delete', suggestion)}
+                    >
+                      {isProcessing ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent"></div>
+                      ) : (
+                        <svg className="w-4 h-4 transition-transform duration-200 hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 });

@@ -38,7 +38,12 @@ export class ReviewService {
         throw this.createReviewError('Authentication token not available', 'AUTH_ERROR', false);
       }
 
-      const response = await fetch(`${this.config.baseUrl}/posts/${postId}/reviews`, {
+      // Normalize base URL to ensure '/api' prefix is present and no trailing slash
+      const base = (this.config.baseUrl || '').replace(/\/$/, '');
+      const apiBase = base.endsWith('/api') ? base : `${base}/api`;
+      const url = `${apiBase}/posts/${encodeURIComponent(postId)}/reviews`;
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -117,7 +122,7 @@ export class ReviewService {
       }
     } catch (error) {
       // Handle network and other errors
-      if (error instanceof ReviewError) {
+      if (error && typeof error === 'object' && 'code' in error && 'retryable' in error) {
         throw error; // Re-throw our custom errors
       }
 
@@ -191,8 +196,7 @@ export class ReviewService {
           const response = await fetch(endpoint, {
             method: 'GET',
             headers: {
-              'Authorization': `Bearer ${token}`,
-              'Accept': 'application/json'
+              'Authorization': `${token}`
             },
             signal,
             // Add timeout for individual polling requests
@@ -283,6 +287,7 @@ export class ReviewService {
                 ));
                 return;
               case 403:
+                console.warn('[Review] Subscribe endpoint returned 403. Live updates disabled. Manually refresh after ~1 minute.');
                 onError(this.createReviewError(
                   'Access denied to review updates. Please try starting the review again.',
                   'ACCESS_DENIED',
@@ -435,7 +440,7 @@ export class ReviewService {
     }
 
     // Handle old format for backward compatibility
-    if (rawResponse.momentoToken && (rawResponse.topicName || rawResponse.subscribeUrl)) {
+    if (rawResponse.momentoToken && rawResponse.subscribeUrl) {
       // Validate momento token
       if (typeof rawResponse.momentoToken !== 'string' || rawResponse.momentoToken.trim().length === 0) {
         throw new Error('Review response contains invalid momento token');
@@ -530,22 +535,7 @@ export class ReviewService {
     return error;
   }
 
-  /**
-   * Create a standardized API error (legacy compatibility)
-   */
-  private createApiError(error: unknown, defaultMessage: string): ApiError {
-    if (error instanceof Error) {
-      return {
-        message: error.message,
-        code: 'API_ERROR'
-      };
-    }
 
-    return {
-      message: defaultMessage,
-      code: 'UNKNOWN_ERROR'
-    };
-  }
 
   /**
    * Utility function for delays
