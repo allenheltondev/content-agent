@@ -72,7 +72,7 @@ export function useOptimisticSuggestionResolution(
 
   // Queue for batching resolution requests
   const resolutionQueueRef = useRef<ResolutionQueueItem[]>([]);
-  const batchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const processingRef = useRef<boolean>(false);
 
   /**

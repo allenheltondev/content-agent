@@ -89,7 +89,7 @@ export function useOptimizedSuggestionState(
 
   // Batching state
   const pendingUpdatesRef = useRef<Array<() => void>>([]);
-  const batchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Subscribe to state changes

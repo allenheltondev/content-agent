@@ -189,7 +189,7 @@ export const InteractiveSuggestionHighlights = ({
 }: InteractiveSuggestionHighlightsProps) => {
   const [hoveredSuggestion, setHoveredSuggestion] = useState<string | null>(null);
   const [lastClickedPosition, setLastClickedPosition] = useState<{ startOffset: number; endOffset: number; timestamp: number } | null>(null);
-  const clickCycleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const clickCycleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Initialize scroll-to-active functionality for highlight clicks
   const { scrollToActiveWithNavigation } = useSuggestionScrollToActive({

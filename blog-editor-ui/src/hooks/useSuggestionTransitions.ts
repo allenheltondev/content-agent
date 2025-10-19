@@ -117,9 +117,9 @@ export function useSuggestionTransitions(config: TransitionConfig = {}) {
   const [currentSuggestionId, setCurrentSuggestionId] = useState<string | null>(null);
   const [previousSuggestionId, setPreviousSuggestionId] = useState<string | null>(null);
 
-  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const staggerTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const staggerTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   /**
    * Clear all active timeouts

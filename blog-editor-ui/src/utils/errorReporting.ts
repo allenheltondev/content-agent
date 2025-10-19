@@ -78,22 +78,18 @@ export class ErrorReportingManager {
       metadata
     };
 
-    // Add component stack if available (from React error boundary)
     if (metadata?.errorInfo?.componentStack) {
       report.componentStack = metadata.errorInfo.componentStack;
     }
 
-    // Console logging
     if (this.options.enableConsoleLogging) {
       this.logToConsole(report);
     }
 
-    // Local storage
     if (this.options.enableLocalStorage) {
       this.saveToLocalStorage(report);
     }
 
-    // Remote reporting (would be implemented in production)
     if (this.options.enableRemoteReporting) {
       this.sendToRemoteService(report);
     }
@@ -169,32 +165,29 @@ export class ErrorReportingManager {
     const now = Date.now();
 
     try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key || !key.startsWith(ERROR_REPORT_PREFIX)) {
+      for (let storageIndex = 0; storageIndex < localStorage.length; storageIndex++) {
+        const storageKey = localStorage.key(storageIndex);
+        if (!storageKey || !storageKey.startsWith(ERROR_REPORT_PREFIX)) {
           continue;
         }
 
         try {
-          const stored = localStorage.getItem(key);
-          if (!stored) continue;
+          const storedReport = localStorage.getItem(storageKey);
+          if (!storedReport) continue;
 
-          const report: ErrorReport = JSON.parse(stored);
+          const report: ErrorReport = JSON.parse(storedReport);
 
-          // Skip old reports
           if (now - report.timestamp > this.options.maxAge) {
-            localStorage.removeItem(key);
+            localStorage.removeItem(storageKey);
             continue;
           }
 
           reports.push(report);
         } catch (parseError) {
-          // Remove corrupted reports
-          localStorage.removeItem(key);
+          localStorage.removeItem(storageKey);
         }
       }
 
-      // Sort by timestamp (newest first)
       return reports.sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
       console.warn('Failed to get error reports:', error);
@@ -262,35 +255,33 @@ export class ErrorReportingManager {
     try {
       const keysToRemove: string[] = [];
 
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key || !key.startsWith(ERROR_REPORT_PREFIX)) {
+      for (let storageIndex = 0; storageIndex < localStorage.length; storageIndex++) {
+        const storageKey = localStorage.key(storageIndex);
+        if (!storageKey || !storageKey.startsWith(ERROR_REPORT_PREFIX)) {
           continue;
         }
 
         try {
-          const stored = localStorage.getItem(key);
-          if (!stored) {
-            keysToRemove.push(key);
+          const storedReport = localStorage.getItem(storageKey);
+          if (!storedReport) {
+            keysToRemove.push(storageKey);
             continue;
           }
 
-          const report: ErrorReport = JSON.parse(stored);
+          const report: ErrorReport = JSON.parse(storedReport);
           if (now - report.timestamp > this.options.maxAge) {
-            keysToRemove.push(key);
+            keysToRemove.push(storageKey);
           }
         } catch (parseError) {
-          keysToRemove.push(key);
+          keysToRemove.push(storageKey);
         }
       }
 
-      // Remove old reports
-      keysToRemove.forEach(key => {
-        localStorage.removeItem(key);
+      keysToRemove.forEach(expiredKey => {
+        localStorage.removeItem(expiredKey);
         cleaned++;
       });
 
-      // Also limit total number of reports
       const allReports = this.getAllReports();
       if (allReports.length > this.options.maxReports) {
         const excess = allReports.slice(this.options.maxReports);
@@ -300,9 +291,7 @@ export class ErrorReportingManager {
         });
       }
 
-      if (cleaned > 0) {
-        console.log(`Cleaned up ${cleaned} old error reports`);
-      }
+
 
       return cleaned;
     } catch (error) {
@@ -393,16 +382,8 @@ export class ErrorReportingManager {
   /**
    * Send error report to remote service (placeholder for production)
    */
-  private static sendToRemoteService(report: ErrorReport): void {
-    // In production, this would send to an error tracking service like Sentry
-    console.log('Would send error report to remote service:', report.id);
-
-    // Example implementation:
-    // fetch('/api/errors', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(report)
-    // }).catch(err => console.warn('Failed to send error report:', err));
+  private static sendToRemoteService(_report: ErrorReport): void {
+    // Production implementation would send to error tracking service
   }
 
   /**

@@ -1,9 +1,9 @@
+import { useEffect } from 'react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ProfileProvider } from './contexts/ProfileContext';
 import { AppRouter } from './components/common/AppRouter';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
-import { useSkipLinks } from './hooks/useKeyboardNavigation';
 import './config/amplify'; // Initialize Amplify configuration
 import { initializeApi } from './config/api'; // Initialize API service
 import { initializeErrorBoundarySystem } from './utils/errorBoundarySetup';
@@ -19,7 +19,31 @@ initializeErrorBoundarySystem();
 
 function App() {
   // Initialize skip links functionality
-  useSkipLinks();
+  useEffect(() => {
+    const skipLinks = document.querySelectorAll('[data-skip-link]');
+
+    const handleSkipLinkClick = (event: Event) => {
+      event.preventDefault();
+      const target = (event.target as HTMLAnchorElement).getAttribute('href');
+      if (target) {
+        const targetElement = document.querySelector(target);
+        if (targetElement) {
+          (targetElement as HTMLElement).focus();
+          targetElement.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
+    };
+
+    skipLinks.forEach(link => {
+      link.addEventListener('click', handleSkipLinkClick);
+    });
+
+    return () => {
+      skipLinks.forEach(link => {
+        link.removeEventListener('click', handleSkipLinkClick);
+      });
+    };
+  }, []);
 
   return (
     <ErrorBoundary>

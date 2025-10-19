@@ -8,7 +8,7 @@ import { InteractiveSuggestionHighlights } from './InteractiveSuggestionHighligh
 import { VirtualizedSuggestionHighlights } from './VirtualizedSuggestionHighlights';
 import { SuggestionActionFeedback } from './SuggestionActionFeedback';
 import type { SuggestionActionFeedback as FeedbackType } from './SuggestionActionButtons';
-import { usePerformanceMonitor } from '../../hooks/usePerformanceMonitor';
+
 
 /**
  * Configuration for the integrated active suggestion system
@@ -216,15 +216,7 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
   const [actionFeedback, setActionFeedback] = useState<FeedbackType | null>(null);
   const [lastNavigationDirection, setLastNavigationDirection] = useState<'forward' | 'backward' | 'none'>('none');
 
-  // Performance monitoring
-  const { startMeasurement, endMeasurement, getMetrics } = usePerformanceMonitor({
-    enabled: finalConfig.enablePerformanceMonitoring,
-    thresholds: {
-      navigation: 100, // 100ms threshold for navigation
-      resolution: 200, // 200ms threshold for suggestion resolution
-      rendering: 50    // 50ms threshold for rendering
-    }
-  });
+  // Performance monitoring removed
 
   // Choose between optimized and standard manager based on configuration
   const useOptimizedManager = finalConfig.enablePerformanceOptimizations &&
@@ -237,17 +229,8 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
     enableAutoAdvance: finalConfig.enableAutoAdvance,
     enableScrollToActive: finalConfig.enableScrollToActive,
     onActiveSuggestionChange: useCallback((suggestionId: string | null) => {
-      // Performance measurement for suggestion changes
-      if (finalConfig.enablePerformanceMonitoring) {
-        startMeasurement('navigation');
-      }
-
       onActiveSuggestionChange?.(suggestionId);
-
-      if (finalConfig.enablePerformanceMonitoring) {
-        endMeasurement('navigation');
-      }
-    }, [onActiveSuggestionChange, finalConfig.enablePerformanceMonitoring, startMeasurement, endMeasurement]),
+    }, [onActiveSuggestionChange]),
     onSuggestionResolved: useCallback((suggestionId: string, _remainingCount: number) => {
       onSuggestionResolved?.(suggestionId, 'accepted'); // Default to accepted for now
 
@@ -317,7 +300,7 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
       batchDelay: 500,
       enableAutoRetry: true,
       maxRetries: 3,
-      enablePerformanceMonitoring: finalConfig.enablePerformanceMonitoring,
+      enablePerformanceMonitoring: false,
       onResolutionSuccess: (action) => {
         // Show success feedback
         const suggestion = suggestions.find(s => s.id === action.suggestionId);
@@ -359,22 +342,11 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
 
   // Handle highlight clicks from InteractiveSuggestionHighlights
   const handleHighlightClick = useCallback((suggestionId: string) => {
-    if (finalConfig.enablePerformanceMonitoring) {
-      startMeasurement('navigation');
-    }
-
     activeSuggestionManager.setActiveSuggestion(suggestionId);
-  if(finalConfig.enablePerformanceMonitoring) {
-      endMeasurement('navigation');
-    }
-  }, [activeSuggestionManager, finalConfig.enablePerformanceMonitoring, startMeasurement, endMeasurement]);
+  }, [activeSuggestionManager]);
 
   // Handle navigation from ActiveSuggestionArea
   const handleNavigate = useCallback((direction: 'previous' | 'next') => {
-    if (finalConfig.enablePerformanceMonitoring) {
-      startMeasurement('navigation');
-    }
-
     const success = direction === 'next'
       ? activeSuggestionManager.navigateNext()
       : activeSuggestionManager.navigatePrevious();
@@ -382,39 +354,19 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
     if (success) {
       setLastNavigationDirection(direction === 'next' ? 'forward' : 'backward');
     }
-
-    if (finalConfig.enablePerformanceMonitoring) {
-      endMeasurement('navigation');
-    }
-  }, [activeSuggestionManager, finalConfig.enablePerformanceMonitoring, startMeasurement, endMeasurement]);
+  }, [activeSuggestionManager]);
 
   // Handle suggestion acceptance with optimized resolution
   const handleAcceptSuggestion = useCallback((suggestionId: string, editedText?: string) => {
-    if (finalConfig.enablePerformanceMonitoring) {
-      startMeasurement('resolution');
-    }
-
     // Use resolution manager for optimistic updates and batch processing
     resolutionManager.acceptSuggestion(suggestionId, editedText);
-
-    if (finalConfig.enablePerformanceMonitoring) {
-      endMeasurement('resolution');
-    }
-  }, [resolutionManager, finalConfig.enablePerformanceMonitoring, startMeasurement, endMeasurement]);
+  }, [resolutionManager]);
 
   // Handle suggestion rejection with optimized resolution
   const handleRejectSuggestion = useCallback((suggestionId: string) => {
-    if (finalConfig.enablePerformanceMonitoring) {
-      startMeasurement('resolution');
-    }
-
     // Use resolution manager for optimistic updates and batch processing
     resolutionManager.rejectSuggestion(suggestionId);
-
-    if (finalConfig.enablePerformanceMonitoring) {
-      endMeasurement('resolution');
-    }
-  }, [resolutionManager, finalConfig.enablePerformanceMonitoring, startMeasurement, endMeasurement]);
+  }, [resolutionManager]);
 
   // Handle suggestion editing
   const handleEditSuggestion = useCallback((suggestionId: string, newText: string) => {
@@ -441,20 +393,8 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
   }, [finalConfig.enableOptimisticUpdates, resolutionManager.availableSuggestions, activeSuggestionManager.availableSuggestions]);
 
   // Log performance metrics periodically (development only)
-  useEffect(() => {
-    if (finalConfig.enablePerformanceMonitoring && process.env.NODE_ENV === 'development') {
-      const interval = setInterval(() => {
-        const metrics = typeof getMetrics === 'function' ? getMetrics() : {} as any;
-        const navCount = (metrics as any)?.navigation?.count ?? 0;
-        const resCount = (metrics as any)?.resolution?.count ?? 0;
-        if (navCount > 0 || resCount > 0) {
-          console.log('Active Suggestion System Performance:', metrics);
-        }
-      }, 10000); // Log every 10 seconds
-
-      return () => clearInterval(interval);
-    }
-  }, [finalConfig.enablePerformanceMonitoring, getMetrics]);
+  // Perf logging removed
+  useEffect(() => { return; }, []);
 
   // Early return if not rendering
   if (!shouldRender) {
@@ -462,13 +402,7 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
   }
 
   // Performance warning for large suggestion sets
-  if (finalConfig.enablePerformanceMonitoring &&
-      suggestions.length > finalConfig.performanceThreshold) {
-    console.warn(
-      `Large suggestion set detected (${suggestions.length} suggestions). ` +
-      `Consider implementing virtualization for better performance.`
-    );
-  }
+  // Performance warning removed
 
   return (
     <div className={`integrated-active-suggestion-system ${className}`}>

@@ -3,7 +3,6 @@
  * Handles profile setup data, new post content, and sensitive data cleanup
  */
 
-// Storage keys
 export const STORAGE_KEYS = {
   PROFILE_SETUP_DRAFT: 'profile_setup_draft',
   NEW_POST_DRAFT: 'new_post_draft',
@@ -11,8 +10,6 @@ export const STORAGE_KEYS = {
   EDITOR_PREFERENCES: 'editor_preferences',
   DRAFT_PREFIX: 'draft_'
 } as const;
-
-// Data interfaces
 export interface ProfileSetupDraft {
   writingTone: string;
   writingStyle: string;
@@ -32,7 +29,6 @@ export interface NewPostDraft {
 
 
 
-// Sensitive data patterns to clean up
 const SENSITIVE_PATTERNS = [
   /passw/i,
   /token/i,
@@ -49,7 +45,7 @@ function isSensitiveKey(key: string): boolean {
   return SENSITIVE_PATTERNS.some(pattern => pattern.test(key));
 }
 
-// Removed unused utility functions since localStorage operations are disabled
+
 
 /**
  * Safe localStorage operations with error handling
@@ -59,7 +55,6 @@ export class LocalStorageManager {
    * Save profile setup draft data
    */
   static saveProfileSetupDraft(_data: Partial<ProfileSetupDraft>): void {
-    // Disabled: no-op for hackathon to avoid local draft persistence
     return;
   }
 
@@ -67,7 +62,6 @@ export class LocalStorageManager {
    * Get profile setup draft data
    */
   static getProfileSetupDraft(): ProfileSetupDraft | null {
-    // Disabled: no local profile draft recovery
     return null;
   }
 
@@ -75,7 +69,6 @@ export class LocalStorageManager {
    * Clear profile setup draft data
    */
   static clearProfileSetupDraft(): void {
-    // Disabled: no-op
     return;
   }
 
@@ -83,7 +76,6 @@ export class LocalStorageManager {
    * Check if profile setup draft exists and is recent
    */
   static hasRecentProfileSetupDraft(_maxAgeMs: number = 24 * 60 * 60 * 1000): boolean {
-    // Disabled: always false
     return false;
   }
 
@@ -91,7 +83,6 @@ export class LocalStorageManager {
    * Save new post draft data
    */
   static saveNewPostDraft(_data: Partial<NewPostDraft>): void {
-    // Disabled: no-op
     return;
   }
 
@@ -99,7 +90,6 @@ export class LocalStorageManager {
    * Get new post draft data
    */
   static getNewPostDraft(): NewPostDraft | null {
-    // Disabled: no local new-post draft recovery
     return null;
   }
 
@@ -107,7 +97,6 @@ export class LocalStorageManager {
    * Clear new post draft data
    */
   static clearNewPostDraft(): void {
-    // Disabled: no-op
     return;
   }
 
@@ -115,7 +104,6 @@ export class LocalStorageManager {
    * Check if new post draft exists and is recent
    */
   static hasRecentNewPostDraft(_maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): boolean {
-    // Disabled: always false
     return false;
   }
 
@@ -128,21 +116,18 @@ export class LocalStorageManager {
     try {
       const keysToRemove: string[] = [];
 
-      // Check all localStorage keys
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && isSensitiveKey(key)) {
-          keysToRemove.push(key);
+      for (let storageIndex = 0; storageIndex < localStorage.length; storageIndex++) {
+        const storageKey = localStorage.key(storageIndex);
+        if (storageKey && isSensitiveKey(storageKey)) {
+          keysToRemove.push(storageKey);
         }
       }
 
-      // Remove sensitive keys
-      keysToRemove.forEach(key => {
+      keysToRemove.forEach(sensitiveKey => {
         try {
-          localStorage.removeItem(key);
-          console.log(`Cleaned up sensitive data: ${key}`);
+          localStorage.removeItem(sensitiveKey);
         } catch (error) {
-          console.warn(`Failed to remove sensitive key ${key}:`, error);
+          console.warn(`Failed to remove sensitive key ${sensitiveKey}:`, error);
         }
       });
     } catch (error) {
@@ -154,7 +139,6 @@ export class LocalStorageManager {
    * Clean up old draft data based on age
    */
   static cleanupOldDrafts(_maxAgeMs: number = 30 * 24 * 60 * 60 * 1000): void {
-    // Disabled: no-op
     return;
   }
 
@@ -173,16 +157,16 @@ export class LocalStorageManager {
       let draftKeys = 0;
       let estimatedSize = 0;
 
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key) {
+      for (let storageIndex = 0; storageIndex < localStorage.length; storageIndex++) {
+        const storageKey = localStorage.key(storageIndex);
+        if (storageKey) {
           totalKeys++;
-          const value = localStorage.getItem(key);
-          if (value) {
-            estimatedSize += key.length + value.length;
+          const storageValue = localStorage.getItem(storageKey);
+          if (storageValue) {
+            estimatedSize += storageKey.length + storageValue.length;
           }
 
-          if (key.includes('draft') || key.startsWith(STORAGE_KEYS.DRAFT_PREFIX)) {
+          if (storageKey.includes('draft') || storageKey.startsWith(STORAGE_KEYS.DRAFT_PREFIX)) {
             draftKeys++;
           }
         }
@@ -212,16 +196,9 @@ export class LocalStorageManager {
    */
   static performCompleteCleanup(): void {
     try {
-      // Clean up profile setup data
       this.clearProfileSetupDraft();
-
-      // Clean up sensitive data
       this.cleanupSensitiveData();
-
-      // Clean up old drafts
       this.cleanupOldDrafts();
-
-      console.log('Performed complete localStorage cleanup');
     } catch (error) {
       console.warn('Failed to perform complete cleanup:', error);
     }

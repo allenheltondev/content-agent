@@ -47,37 +47,34 @@ export function getSuggestionActionLabel(action: 'accept' | 'reject' | 'delete',
  * Check if color contrast meets WCAG AA standards
  */
 export function checkColorContrast(foreground: string, background: string): boolean {
-  // Convert hex colors to RGB
-  const hexToRgb = (hex: string) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
+  const hexToRgb = (hexColor: string) => {
+    const hexMatch = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hexColor);
+    return hexMatch ? {
+      r: parseInt(hexMatch[1], 16),
+      g: parseInt(hexMatch[2], 16),
+      b: parseInt(hexMatch[3], 16)
     } : null;
   };
 
-  // Calculate relative luminance
-  const getLuminance = (r: number, g: number, b: number) => {
-    const [rs, gs, bs] = [r, g, b].map(c => {
-      c = c / 255;
-      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  const getLuminance = (red: number, green: number, blue: number) => {
+    const [redSrgb, greenSrgb, blueSrgb] = [red, green, blue].map(colorValue => {
+      colorValue = colorValue / 255;
+      return colorValue <= 0.03928 ? colorValue / 12.92 : Math.pow((colorValue + 0.055) / 1.055, 2.4);
     });
-    return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+    return 0.2126 * redSrgb + 0.7152 * greenSrgb + 0.0722 * blueSrgb;
   };
 
-  const fg = hexToRgb(foreground);
-  const bg = hexToRgb(background);
+  const foregroundRgb = hexToRgb(foreground);
+  const backgroundRgb = hexToRgb(background);
 
-  if (!fg || !bg) return false;
+  if (!foregroundRgb || !backgroundRgb) return false;
 
-  const fgLuminance = getLuminance(fg.r, fg.g, fg.b);
-  const bgLuminance = getLuminance(bg.r, bg.g, bg.b);
+  const foregroundLuminance = getLuminance(foregroundRgb.r, foregroundRgb.g, foregroundRgb.b);
+  const backgroundLuminance = getLuminance(backgroundRgb.r, backgroundRgb.g, backgroundRgb.b);
 
-  const contrast = (Math.max(fgLuminance, bgLuminance) + 0.05) /
-                   (Math.min(fgLuminance, bgLuminance) + 0.05);
+  const contrast = (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+                   (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
 
-  // WCAG AA requires 4.5:1 for normal text, 3:1 for large text
   return contrast >= 4.5;
 }
 
@@ -85,7 +82,6 @@ export function checkColorContrast(foreground: string, background: string): bool
  * Get accessible color combinations for suggestion types
  */
 export function getAccessibleSuggestionColors(type: SuggestionType) {
-  // These colors have been tested for WCAG AA compliance
   const accessibleColors = {
     llm: {
       bg: '#e6f3ff',
@@ -215,7 +211,6 @@ export function announceToScreenReader(message: string, priority: 'polite' | 'as
 
   document.body.appendChild(announcement);
 
-  // Remove after announcement
   setTimeout(() => {
     document.body.removeChild(announcement);
   }, 1000);

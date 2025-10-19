@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [resendCooldownUntil, setResendCooldownUntil] = useState<number | null>(null);
 
   // Token refresh management
-  const [tokenRefreshInterval, setTokenRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [tokenRefreshInterval, setTokenRefreshInterval] = useState<ReturnType<typeof setInterval> | null>(null);
   const [lastTokenRefresh, setLastTokenRefresh] = useState<number | null>(null);
 
   // Authentication persistence functions
