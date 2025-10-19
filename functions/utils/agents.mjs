@@ -25,7 +25,7 @@ export const converse = async (model, systemPrompt, userPrompt, tools, options) 
         modelId: model,
         system: [{ text: systemPrompt }],
         messages: [...conversation, ...messages],
-        toolConfig: { tools: tools.map(t => { return { toolSpec: t.spec }; }) },
+        ...tools.length && { toolConfig: { tools: tools.map(t => { return { toolSpec: t.spec }; }) } },
         inferenceConfig: { maxTokens: MAX_TOKENS }
       });
 
@@ -44,6 +44,7 @@ export const converse = async (model, systemPrompt, userPrompt, tools, options) 
       const textItems = messageContent.filter(item => 'text' in item && !!item.text);
 
       if (toolUseItems.length) {
+        const message = { role: 'user', content: [] };
         for (const toolUseItem of toolUseItems) {
           const { toolUse } = toolUseItem;
           const { name: toolName, input: toolInput, toolUseId } = toolUse;
@@ -58,7 +59,7 @@ export const converse = async (model, systemPrompt, userPrompt, tools, options) 
             }
 
             // Never allow an LLM to provide a tenant id!! Instead infer it from the code for security purposes
-            if (options?.tenantId) {
+            if (options?.tenantId && tool.isMultiTenant) {
               toolResult = await tool.handler(options.tenantId, toolInput);
             } else {
               toolResult = await tool.handler(toolInput);
@@ -66,17 +67,15 @@ export const converse = async (model, systemPrompt, userPrompt, tools, options) 
           } catch (toolError) {
             toolResult = { error: toolError.message };
           }
-
+          console.log(toolResult);
           const toolResultBlock = {
             toolUseId,
             content: [{ text: JSON.stringify(toolResult) }]
           };
 
-          messages.push({
-            role: 'user',
-            content: [{ toolResult: toolResultBlock }]
-          });
+          message.content.push({ toolResult: toolResultBlock });
         }
+        messages.push(message);
       } else if (textItems.length > 0) {
         finalResponse = textItems.map(item => item.text).join('');
         break;
@@ -126,9 +125,9 @@ const loadConversation = async (sessionId, actorId) => {
   const conversation = eventsResponse.events.flatMap(e => {
     return e.payload.flatMap(msg => {
       if (msg.conversational.role === 'ASSISTANT') {
-        return { role: 'assistant', content: msg.conversational.content };
+        return { role: 'assistant', content: [msg.conversational.content] };
       } else if (msg.conversational.role === 'USER') {
-        return { role: 'user', content: msg.conversational.content };
+        return { role: 'user', content: [msg.conversational.content] };
       } else if (msg.conversational.role === 'TOOL') {
         return { role: 'user', content: [{ toolResult: JSON.parse(msg.conversational.content.text) }] };
       }
@@ -148,18 +147,18 @@ const addToConversation = async (sessionId, actorId, messages) => {
       return null; //intentionally omit tool result messages because they bloat the conversation
     }
   }).filter(msg => msg !== null);
-  console.log(JSON.stringify(agentCoreMessages));
   const memoryId = await getMemoryId();
   await ac.send(new CreateEventCommand({
     memoryId,
     actorId,
     sessionId,
-    payload: agentCoreMessages.map(msg => msg)
+    eventTimestamp: new Date(),
+    payload: agentCoreMessages.map(msg => { return { conversational: msg }; })
   }));
 };
 
 const sanitizeResponse = (text, options = {}) => {
-  if (options.preserveThinkingTags) {
+  if (options?.preserveThinkingTags) {
     return text.trim();
   }
   return text.replace(/<thinking>[\s\S]*?<\/thinking>\s*/g, '').trim();

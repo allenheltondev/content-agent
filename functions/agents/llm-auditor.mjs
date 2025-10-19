@@ -59,21 +59,23 @@ Proceed:
 1) Score and prepare audit.
 2) Call saveLlmAudit (always). If offsets are available and you prepared patches, call createSuggestions afterward with at most 10 items.
 3) If no further action is needed, return a concise confirmation message.
+4) If action is needed, return a concise message indicating how many suggestions you made but do not include information about them.
 `;
 
-const userPrompt = `
+    const userPrompt = `
 contentId: ${contentId}
 content:
 ${content.body}
-`
+`;
     const response = await converse('amazon.nova-pro-v1:0', systemPrompt, userPrompt, tools, {
       tenantId,
       sessionId,
       actorId
     });
 
-    return response;
+    return { message: response };
   } catch (err) {
     console.error(err);
+    throw err;
   }
 };

@@ -61,7 +61,7 @@ export const handler = async (event) => {
     console.error('Handler error:', err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Internal server error' })
+      body: JSON.stringify({ message: 'Something went wrong' })
     };
   }
 };

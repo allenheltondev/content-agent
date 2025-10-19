@@ -1,0 +1,303 @@
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "Save idempotency key",
+  "States": {
+    "Save idempotency key": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:putItem",
+      "Arguments": {
+        "TableName": "${TableName}",
+        "Item": {
+          "pk": {
+            "S": "{% $states.input.detail.tenantId & '#' & $states.input.detail.contentId & '#' & $states.input.detail.version %}"
+          },
+          "sk": {
+            "S": "analysis"
+          },
+          "status": {
+            "S": "in progress"
+          },
+          "ttl": {
+            "N": "{% $string($floor($millis()/1000) + 3*24*60*60) %}"
+          }
+        },
+        "ConditionExpression": "attribute_not_exists(pk) OR (#s = :failed)",
+        "ExpressionAttributeNames": {
+          "#s": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":failed": {
+            "S": "failed"
+          }
+        }
+      },
+      "Next": "Call Agents",
+      "Assign": {
+        "tenantId": "{% $states.context.Execution.Input.detail.tenantId %}",
+        "contentId": "{% $states.context.Execution.Input.detail.contentId %}",
+        "version": "{% $states.context.Execution.Input.detail.version %}",
+        "sessionId": "{% $uuid() %}"
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Idempotency Check Failed - Skip"
+        }
+      ]
+    },
+    "Idempotency Check Failed - Skip": {
+      "Type": "Succeed"
+    },
+    "Call Agents": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "LLM Audit Agent",
+          "States": {
+            "LLM Audit Agent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "${LLMAuditAgent}",
+                "Payload": {
+                  "tenantId": "{% $tenantId %}",
+                  "contentId": "{% $contentId %}",
+                  "sessionId": "{% $sessionId %}"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Brand Audit Agent",
+          "States": {
+            "Brand Audit Agent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "${BrandAuditAgent}",
+                "Payload": {
+                  "tenantId": "{% $tenantId %}",
+                  "contentId": "{% $contentId %}",
+                  "sessionId": "{% $sessionId %}"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Fact Check Agent",
+          "States": {
+            "Fact Check Agent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "${FactCheckAgent}",
+                "Payload": {
+                  "tenantId": "{% $tenantId %}",
+                  "contentId": "{% $contentId %}",
+                  "sessionId": "{% $sessionId %}"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Readability Agent",
+          "States": {
+            "Readability Agent": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "${ReadabilityAgent}",
+                "Payload": {
+                  "tenantId": "{% $tenantId %}",
+                  "contentId": "{% $contentId %}",
+                  "sessionId": "{% $sessionId %}"
+                }
+              },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2,
+                  "JitterStrategy": "FULL"
+                }
+              ],
+              "End": true
+            }
+          }
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Set Failed Status"
+        }
+      ],
+      "Next": "Summarize via Agent"
+    },
+    "Summarize via Agent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${SummarizeAgent}",
+        "Payload": {
+          "tenantId": "{% $tenantId %}",
+          "contentId": "{% $contentId %}",
+          "sessionId": "{% $sessionId %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Set Success Status"
+    },
+    "Set Success Status": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Arguments": {
+        "TableName": "${TableName}",
+        "Key": {
+          "pk": {
+            "S": "{% $tenantId & '#' & $contentId & '#' & $version %}"
+          },
+          "sk": {
+            "S": "analysis"
+          }
+        },
+        "UpdateExpression": "SET #status = :succeeded",
+        "ExpressionAttributeNames": {
+          "#status": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":succeeded": {
+            "S": "succeeded"
+          }
+        }
+      },
+      "Next": "Publish Completed Message (Success)"
+    },
+    "Publish Completed Message (Success)": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Arguments": {
+        "Entries": [
+          {
+            "Detail": {
+              "tenantId": "{% $tenantId %}",
+              "contentId": "{% $contentId %}",
+              "success": true
+            },
+            "DetailType": "Content Analysis Completed",
+            "Source": "content-agent"
+          }
+        ]
+      },
+      "End": true
+    },
+    "Set Failed Status": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:updateItem",
+      "Arguments": {
+        "TableName": "${TableName}",
+        "Key": {
+          "pk": {
+            "S": "{% $tenantId & '#' & $contentId & '#' & $version %}"
+          },
+          "sk": {
+            "S": "analysis"
+          }
+        },
+        "UpdateExpression": "SET #status = :failed",
+        "ExpressionAttributeNames": {
+          "#status": "status"
+        },
+        "ExpressionAttributeValues": {
+          ":failed": {
+            "S": "failed"
+          }
+        }
+      },
+      "Next": "Publish Completed Message (Failed)"
+    },
+    "Publish Completed Message (Failed)": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Arguments": {
+        "Entries": [
+          {
+            "Detail": {
+              "tenantId": "{% $tenantId %}",
+              "contentId": "{% $contentId %}",
+              "success": false
+            },
+            "DetailType": "Content Analysis Completed",
+            "Source": "content-agent"
+          }
+        ]
+      },
+      "Next": "Fail"
+    },
+    "Fail": {
+      "Type": "Fail"
+    }
+  },
+  "QueryLanguage": "JSONata"
+}

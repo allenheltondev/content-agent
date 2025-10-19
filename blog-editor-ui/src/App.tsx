@@ -1,35 +1,55 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
+import { ProfileProvider } from './contexts/ProfileContext';
+import { AppRouter } from './components/common/AppRouter';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { useSkipLinks } from './hooks/useKeyboardNavigation';
+import './config/amplify'; // Initialize Amplify configuration
+import { initializeApi } from './config/api'; // Initialize API service
+import { initializeErrorBoundarySystem } from './utils/errorBoundarySetup';
+
+
+// Initialize API service
+initializeApi();
+
+// Initialize error boundary system
+initializeErrorBoundarySystem();
+
+
 
 function App() {
-  const [count, setCount] = useState(0)
+  // Initialize skip links functionality
+  useSkipLinks();
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
+    <ErrorBoundary>
+      {/* Skip Links for keyboard navigation */}
+      <div className="sr-only focus-within:not-sr-only">
+        <a
+          href="#main-content"
+          data-skip-link
+          className="absolute top-0 left-0 z-50 px-4 py-2 bg-primary text-white rounded-br-md focus:outline-none focus:ring-2 focus:ring-primary-hover"
+        >
+          Skip to main content
         </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
+        <a
+          href="#main-navigation"
+          data-skip-link
+          className="absolute top-0 left-32 z-50 px-4 py-2 bg-primary text-white rounded-br-md focus:outline-none focus:ring-2 focus:ring-primary-hover"
+        >
+          Skip to navigation
         </a>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+
+      <ToastProvider>
+        <AuthProvider>
+          <ProfileProvider>
+            <AppRouter />
+          </ProfileProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
+  );
 }
 
-export default App
+export default App;

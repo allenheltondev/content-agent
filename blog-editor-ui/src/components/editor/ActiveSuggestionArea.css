@@ -1,0 +1,477 @@
+/* ActiveSuggestionArea Responsive Positioning Styles */
+
+/* Base suggestion area styles */
+[data-suggestion-area="true"] {
+  /* Smooth transitions for position changes */
+  transition: all 0.2s ease-in-out;
+}
+
+/* Mobile-specific styles */
+.mobile-suggestion-area {
+  /* Full width on mobile */
+  width: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+  margin: 0 !important;
+  border-radius: 0.75rem 0.75rem 0 0; /* Rounded top corners only */
+}
+
+.mobile-suggestion-area.floating-suggestion {
+  /* Fixed to bottom on mobile when floating */
+  bottom: 0 !important;
+  top: auto !important;
+  max-height: 50vh !important;
+}
+
+/* Tablet-specific styles */
+.tablet-suggestion-area {
+  max-width: 90vw;
+}
+
+.tablet-suggestion-area.floating-suggestion {
+  /* Better positioning on tablets */
+  right: 1rem !important;
+  max-height: 60vh !important;
+}
+
+/* Desktop-specific styles */
+.desktop-suggestion-area.floating-suggestion {
+  /* Optimal floating position on desktop */
+  width: 400px;
+  max-height: 70vh;
+}
+
+/* Wide screen styles */
+.wide-suggestion-area.floating-suggestion {
+  /* More space on wide screens */
+  width: 450px;
+  max-height: 75vh;
+  right: 2rem !important;
+}
+
+/* Portrait mode adjustments */
+.portrait-mode.floating-suggestion {
+  /* Adjust for portrait orientation */
+  max-height: 50vh !important;
+}
+
+/* Landscape mode adjustments */
+.landscape-mode.floating-suggestion {
+  /* Take advantage of landscape space */
+  max-height: 80vh !important;
+}
+
+/* Inline suggestion styles */
+.inline-suggestion {
+  /* Styles for non-floating suggestions */
+  position: relative !important;
+  width: 100% !important;
+  margin-top: 1rem !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Floating suggestion styles */
+.floating-suggestion {
+  /* Enhanced shadow for floating elements */
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+/* Animation for suggestion area appearance */
+@keyframes suggestionAreaSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes suggestionAreaSlideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Apply animations based on positioning */
+.mobile-suggestion-area,
+.tablet-suggestion-area.inline-suggestion {
+  animation: suggestionAreaSlideIn 0.3s ease-out;
+}
+
+.desktop-suggestion-area.floating-suggestion,
+.wide-suggestion-area.floating-suggestion {
+  animation: suggestionAreaSlideInFromRight 0.3s ease-out;
+}
+
+/* Responsive content adjustments */
+@media (max-width: 640px) {
+  /* Mobile adjustments */
+  [data-suggestion-area="true"] .suggestion-content {
+    padding: 0.75rem;
+  }
+
+  [data-suggestion-area="true"] .suggestion-header {
+    padding: 0.75rem;
+  }
+
+  [data-suggestion-area="true"] .suggestion-actions {
+    padding: 0.75rem;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  [data-suggestion-area="true"] .suggestion-navigation {
+    padding: 0.75rem;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 768px) {
+  /* Tablet adjustments */
+  [data-suggestion-area="true"] .suggestion-content {
+    padding: 1rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktop and wide screen adjustments */
+  [data-suggestion-area="true"] .suggestion-content {
+    padding: 1rem;
+  }
+
+  /* Add subtle hover effects on larger screens */
+  .floating-suggestion:hover {
+    box-shadow: 0 25px 30px -5px rgba(0, 0, 0, 0.15), 0 15px 15px -5px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  [data-suggestion-area="true"] {
+    border-width: 2px;
+    box-shadow: none;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  [data-suggestion-area="true"],
+  .mobile-suggestion-area,
+  .tablet-suggestion-area,
+  .desktop-suggestion-area,
+  .wide-suggestion-area,
+  .floating-suggestion:hover {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Focus management for accessibility */
+[data-suggestion-area="true"]:focus-within {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .floating-suggestion {
+    position: relative !important;
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+  }
+}
+
+/* Suggestion Transition Styles */
+
+/* Base transition styles */
+.suggestion-transition {
+  transition-property: opacity, transform, box-shadow;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+/* Transition states */
+.transition-idle {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+.transition-entering {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.transition-active {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.transition-exiting {
+  opacity: 0;
+  transform: translateX(-20px);
+  pointer-events: none;
+}
+
+.transition-processing {
+  opacity: 0.7;
+  transform: scale(0.98);
+  pointer-events: none;
+}
+
+/* Direction-specific transitions */
+.transition-forward.transition-entering {
+  transform: translateX(30px);
+}
+
+.transition-forward.transition-exiting {
+  transform: translateX(-30px);
+}
+
+.transition-backward.transition-entering {
+  transform: translateX(-30px);
+}
+
+.transition-backward.transition-exiting {
+  transform: translateX(30px);
+}
+
+/* Feature-specific transitions */
+.transition-fade {
+  transition-property: opacity, transform;
+}
+
+.transition-slide {
+  transition-property: transform, opacity;
+}
+
+.transition-scale {
+  transition-property: transform, opacity;
+}
+
+.transition-scale.transition-entering {
+  transform: scale(0.95) translateX(20px);
+}
+
+.transition-scale.transition-active {
+  transform: scale(1) translateX(0);
+}
+
+.transition-scale.transition-exiting {
+  transform: scale(0.95) translateX(-20px);
+}
+
+/* Staggered animations */
+.transition-stagger .stagger-item {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+
+.transition-stagger .stagger-item.stagger-animate {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Content-specific stagger items */
+.suggestion-header {
+  transition-delay: 0ms;
+}
+
+.suggestion-content .stagger-item:nth-child(1) {
+  transition-delay: 50ms;
+}
+
+.suggestion-content .stagger-item:nth-child(2) {
+  transition-delay: 100ms;
+}
+
+.suggestion-content .stagger-item:nth-child(3) {
+  transition-delay: 150ms;
+}
+
+.suggestion-navigation {
+  transition-delay: 200ms;
+}
+
+.suggestion-actions {
+  transition-delay: 250ms;
+}
+
+/* Processing state animations */
+.transition-processing .suggestion-content {
+  position: relative;
+}
+
+.transition-processing .suggestion-content::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: processingShimmer 1.5s infinite;
+}
+
+@keyframes processingShimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Loading state for suggestion resolution */
+.suggestion-resolving {
+  position: relative;
+  overflow: hidden;
+}
+
+.suggestion-resolving::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+  animation: resolutionProgress 0.8s ease-out;
+  z-index: 10;
+}
+
+@keyframes resolutionProgress {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Smooth transitions for navigation */
+.suggestion-navigation-transition {
+  transition: all 0.2s ease-in-out;
+}
+
+.suggestion-navigation-transition:hover {
+  background-color: rgba(249, 250, 251, 0.8);
+}
+
+/* Action button transitions */
+.suggestion-actions .btn {
+  transition: all 0.15s ease-in-out;
+  transform: translateY(0);
+}
+
+.suggestion-actions .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+}
+
+.suggestion-actions .btn:active {
+  transform: translateY(0);
+  transition-duration: 0.05s;
+}
+
+/* Feedback transitions */
+.suggestion-feedback {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center bottom;
+}
+
+.suggestion-feedback.feedback-entering {
+  opacity: 0;
+  transform: scale(0.9) translateY(10px);
+}
+
+.suggestion-feedback.feedback-active {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.suggestion-feedback.feedback-exiting {
+  opacity: 0;
+  transform: scale(0.9) translateY(-10px);
+}
+
+/* Mobile-specific transition adjustments */
+@media (max-width: 640px) {
+  .transition-slide.transition-entering,
+  .transition-slide.transition-exiting {
+    transform: translateY(20px);
+  }
+
+  .transition-forward.transition-entering,
+  .transition-backward.transition-entering {
+    transform: translateY(20px);
+  }
+
+  .transition-forward.transition-exiting,
+  .transition-backward.transition-exiting {
+    transform: translateY(-20px);
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .suggestion-transition,
+  .transition-stagger .stagger-item,
+  .suggestion-navigation-transition,
+  .suggestion-actions .btn,
+  .suggestion-feedback {
+    transition: none;
+    animation: none;
+    transform: none;
+  }
+
+  .transition-processing .suggestion-content::after,
+  .suggestion-resolving::before {
+    display: none;
+  }
+}
+
+/* High contrast mode adjustments */
+@media (prefers-contrast: high) {
+  .transition-processing {
+    opacity: 0.8;
+    border: 2px dashed currentColor;
+  }
+
+  .transition-processing .suggestion-content::after {
+    display: none;
+  }
+}
+
+/* Focus management during transitions */
+.suggestion-transition:focus-within {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.transition-entering:focus-within,
+.transition-exiting:focus-within {
+  outline: none;
+}
+
+/* Performance optimizations */
+.suggestion-transition {
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Smooth scrolling integration */
+.suggestion-transition.scrolling-to-active {
+  transition-delay: 0.1s;
+}

@@ -2,11 +2,14 @@
 
 ## Core Development Principles
 
-### Simplicity First
-- Always choose simplicity over complexity
-- Favor intuitive variable names over comments
-- Use REST guidelines for API endpoints
-- Make the UX as intuitive as possible
+### Simplicity Above All Else
+- **ALWAYS choose the simplest solution that works**
+- Avoid over-engineering - build only what you need right now
+- Prefer straightforward, readable code over clever optimizations
+- Use intuitive variable names that eliminate the need for comments
+- Keep components small and focused on a single responsibility
+- Minimize dependencies - use built-in browser APIs when possible
+- Make the UX so intuitive that users never need instructions
 
 ## Code Style and Structure
 
@@ -69,19 +72,30 @@ export const toolName = {
 
 ## Frontend Development Standards
 
-### React Component Structure
-- Use functional components with hooks
-- Implement TypeScript interfaces for all props and state
-- Use React Context for global state management
-- Implement proper error boundaries
+### Frontend Simplicity Principles
+- **Build the minimum viable feature first** - you can always add complexity later
+- **One component, one purpose** - if a component does multiple things, split it
+- **Inline simple logic** - don't extract every piece of logic into separate functions
+- **Use standard HTML elements** when possible instead of custom components
+- **Avoid abstractions until you have 3+ similar use cases**
+- **Prefer explicit code over magic** - it's easier to debug and maintain
+- **Delete code aggressively** - unused code is a liability
 
-### API Integration
+### React Component Structure - Keep It Simple
+- Use functional components with hooks - avoid class components entirely
+- Keep components small (under 100 lines when possible)
+- Use TypeScript interfaces for props, but don't over-type internal state
+- Prefer local state over global state - only use Context for truly global data
+- Implement error boundaries only where absolutely necessary
+- Avoid complex state management patterns - useState and useEffect cover 90% of needs
+
+### API Integration - Simple and Predictable
 - Follow REST conventions: GET /posts, POST /posts, PUT /posts/:id, DELETE /posts/:id
-- Use intuitive endpoint names that match user mental models
-- Create dedicated service classes for API communication
-- Implement retry logic with exponential backoff
-- Use proper loading states and error handling
-- Cache API responses where appropriate
+- Use endpoint names that match user mental models (not technical jargon)
+- Create one simple service class for API communication - avoid multiple layers
+- Keep error handling simple - show users what went wrong in plain English
+- Use loading states everywhere - users should never wonder if something is working
+- Only cache when absolutely necessary - prefer fresh data over complexity
 
 ### Styling Guidelines
 - Use Tailwind CSS utility classes
@@ -98,17 +112,20 @@ export const toolName = {
 
 ## Testing Standards
 
-### Unit Testing
-- Write tests for all utility functions and services
+### Backend Testing Only
+- **Frontend unit tests are NOT required** - they go stale quickly and slow down iteration
+- Focus testing efforts on backend Lambda functions and business logic
+- Write tests for utility functions and AWS integrations
 - Mock external dependencies (AWS services, APIs)
 - Use descriptive test names that explain the scenario
-- Aim for high test coverage on business logic
+- Aim for high test coverage on backend business logic only
 
-### Integration Testing
-- Test complete user workflows
-- Mock API responses for different scenarios
-- Test error handling and edge cases
-- Validate authentication flows
+### Frontend Testing Philosophy
+- **Manual testing is preferred** for UI components and user workflows
+- Test in the browser during development - it's faster and more reliable
+- Use browser dev tools to verify functionality
+- Focus on user experience over test coverage
+- Only write frontend tests for complex business logic (rare in UI components)
 
 ## Performance Guidelines
 
@@ -118,11 +135,13 @@ export const toolName = {
 - Use efficient DynamoDB query patterns
 - Cache frequently accessed data
 
-### Frontend Optimization
-- Implement code splitting and lazy loading
-- Use React Query for server state management
-- Optimize bundle size with tree shaking
-- Implement proper memoization for expensive operations
+### Frontend Optimization - Only When Needed
+- **Don't optimize prematurely** - build it simple first, optimize only if there's a real performance problem
+- Use code splitting only for large route-level components
+- Avoid complex state management libraries unless absolutely necessary
+- Use React.memo sparingly - only for expensive components that re-render frequently
+- Prefer simple fetch() over heavy HTTP client libraries
+- Keep bundle size reasonable, but don't obsess over every kilobyte
 
 ## Error Handling Standards
 
@@ -132,9 +151,10 @@ export const toolName = {
 - Implement proper HTTP status codes
 - Use structured error responses
 
-### Frontend Error Handling
-- Implement global error boundaries
-- Show user-friendly error messages in plain language
-- Provide retry mechanisms for failed operations
-- Handle network failures gracefully
-- Use intuitive error states that guide users to resolution
+### Frontend Error Handling - Simple and User-Focused
+- **Keep error handling simple** - don't build complex error management systems
+- Show error messages in plain English that users can understand
+- Provide simple retry buttons for failed operations
+- Handle network failures with clear "try again" messaging
+- Use error states that tell users exactly what to do next
+- Avoid technical error codes or stack traces in the UI
