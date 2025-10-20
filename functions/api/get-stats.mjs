@@ -40,16 +40,30 @@ export const handler = async (event) => {
       ? stats.acceptedSuggestions / stats.totalSuggestions
       : 0;
 
+    const suggestionsByTypeSource = stats.suggestionsByType || {};
+    const suggestionsByType = {
+      llm: suggestionsByTypeSource.style || { total: 0, accepted: 0, rejected: 0 },
+      brand: suggestionsByTypeSource.brand || { total: 0, accepted: 0, rejected: 0 },
+      fact: suggestionsByTypeSource.fact || { total: 0, accepted: 0, rejected: 0 },
+      grammar: suggestionsByTypeSource.grammar || { total: 0, accepted: 0, rejected: 0 },
+      spelling: suggestionsByTypeSource.spelling || { total: 0, accepted: 0, rejected: 0 }
+    };
+
     const response = {
       totalPosts,
-      totalSuggestions: stats.totalSuggestions,
-      acceptedSuggestions: stats.acceptedSuggestions,
-      rejectedSuggestions: stats.rejectedSuggestions,
-      skippedSuggestions: stats.skippedSuggestions,
-      deletedSuggestions: stats.deletedSuggestions,
+      totalSuggestions: stats.totalSuggestions || 0,
+      acceptedSuggestions: stats.acceptedSuggestions || 0,
+      rejectedSuggestions: stats.rejectedSuggestions || 0,
+      skippedSuggestions: stats.skippedSuggestions || 0,
+      deletedSuggestions: stats.deletedSuggestions || 0,
       acceptanceRate: Math.round(acceptanceRate * 100) / 100,
-      suggestionsByType: stats.suggestionsByType,
-      insights: insights || []
+      suggestionsByType,
+      insights: Array.isArray(insights) ? insights : [],
+      writingPatterns: {
+        averagePostLength: 0,
+        commonTopics: [],
+        writingTrends: ''
+      }
     };
 
     return formatResponse(200, response);
@@ -71,13 +85,20 @@ const generateWritingInsights = async (tenantId) => {
       }
     }));
 
-    let writingInsights = 'You have not written enough content yet for insights';
-    if (response.memoryRecordSummaries?.length) {
-      writingInsights = `We have learned this about your writing: \n${response.memoryRecordSummaries.map(mrs => mrs.content).join('\n• ')}`;
+    const summaries = response.memoryRecordSummaries || [];
+    if (!summaries.length) {
+      return [];
     }
-    return writingInsights;
+
+    const insights = summaries.map((mrs) => ({
+      type: 'observation',
+      category: 'writing_style',
+      message: typeof mrs.content === 'string' ? mrs.content : JSON.stringify(mrs.content),
+      confidence: 0.7
+    }));
+    return insights;
   } catch (error) {
     console.error('Error generating writing insights:', error);
-    return 'Could not load insight data.';
+    return [];
   }
 };

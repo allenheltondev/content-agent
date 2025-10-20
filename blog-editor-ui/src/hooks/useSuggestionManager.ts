@@ -211,13 +211,13 @@ export function useSuggestionManager(
 
     // Don't start new request if same post is already loading
     if (requestManagerRef.current.isRequestInProgress &&
-        requestManagerRef.current.currentPostId === config.postId) {
+      requestManagerRef.current.currentPostId === config.postId) {
       return;
     }
 
     // Only abort if loading different post
     if (requestManagerRef.current.currentController &&
-        requestManagerRef.current.currentPostId !== config.postId) {
+      requestManagerRef.current.currentPostId !== config.postId) {
       requestManagerRef.current.currentController.abort();
       // Clear the reference to prevent memory leaks
       requestManagerRef.current.currentController = null;
@@ -296,6 +296,35 @@ export function useSuggestionManager(
       // Apply suggestion to content
       const newContent = suggestionService.applySuggestion(content, suggestion);
 
+      // Recalculate remaining suggestion offsets after the replacement
+      const { startOffset, endOffset, replaceWith } = suggestion;
+      const delta = replaceWith.length - (endOffset - startOffset);
+
+      const updatedAllSuggestions: Suggestion[] = state.allSuggestions
+        .map((s) => {
+          if (s.id === suggestionId) {
+            return s; // keep accepted suggestion as-is (filtered by accepted set)
+          }
+
+          // Drop suggestions that overlap the replaced range
+          const overlaps = !(s.endOffset <= startOffset || s.startOffset >= endOffset);
+          if (overlaps) {
+            return null as any;
+          }
+
+          // Shift suggestions that start after the replaced range
+          if (s.startOffset >= endOffset) {
+            return {
+              ...s,
+              startOffset: s.startOffset + delta,
+              endOffset: s.endOffset + delta
+            };
+          }
+
+          return s;
+        })
+        .filter((s): s is Suggestion => Boolean(s));
+
       // Create undo action
       const undoAction: SuggestionUndoAction = {
         id: `undo_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
@@ -313,12 +342,14 @@ export function useSuggestionManager(
         return {
           ...prev,
           acceptedSuggestions: [...prev.acceptedSuggestions, suggestionId],
+          allSuggestions: updatedAllSuggestions,
           undoHistory: newUndoHistory,
           error: null // Clear any previous errors
         };
       });
 
       // Update optimized state
+      optimizedState.updateSuggestions(updatedAllSuggestions);
       optimizedState.markAccepted(suggestionId);
 
       // Update content
@@ -503,7 +534,7 @@ export function useSuggestionManager(
    * Batch resolve multiple suggestions efficiently
    */
   const batchResolveSuggestions = useCallback(async (
-    resolutions: Array<{ suggestionId: string; action: 'accepted' | 'rejected' | 'deleted' }>
+    resolutions: Array<{ suggestionId: string; action: 'accepted' | 'rejected' | 'deleted'; }>
   ) => {
     if (!config.postId) {
       console.error('Post ID is required for suggestion actions');
@@ -513,30 +544,57 @@ export function useSuggestionManager(
     }
 
     try {
-      // Apply content changes for accepted suggestions first
+      // Work on a mutable copy of suggestions for correct offset adjustments
+      let workingSuggestions: Suggestion[] = [...state.allSuggestions];
       let newContent = content;
-      const acceptedResolutions = resolutions.filter(r => r.action === 'accepted');
 
-      for (const resolution of acceptedResolutions) {
-        const suggestion = state.allSuggestions.find(s => s.id === resolution.suggestionId);
-        if (suggestion) {
-          newContent = suggestionService.applySuggestion(newContent, suggestion);
-        }
+      // Process accepted suggestions first in increasing startOffset order
+      const acceptedResolutions = resolutions
+        .filter(r => r.action === 'accepted')
+        .map(r => r.suggestionId);
+
+      const acceptedSorted = workingSuggestions
+        .filter(s => acceptedResolutions.includes(s.id))
+        .sort((a, b) => a.startOffset - b.startOffset);
+
+      for (const s of acceptedSorted) {
+        // Apply to current content using current offsets
+        newContent = suggestionService.applySuggestion(newContent, s);
+
+        // Recalculate remaining suggestion offsets and drop overlaps
+        const { startOffset, endOffset, replaceWith } = s;
+        const delta = replaceWith.length - (endOffset - startOffset);
+
+        workingSuggestions = workingSuggestions.map((other) => {
+          if (other.id === s.id) return other;
+
+          const overlaps = !(other.endOffset <= startOffset || other.startOffset >= endOffset);
+          if (overlaps) return null as any;
+
+          if (other.startOffset >= endOffset) {
+            return {
+              ...other,
+              startOffset: other.startOffset + delta,
+              endOffset: other.endOffset + delta
+            };
+          }
+          return other;
+        }).filter((x): x is Suggestion => Boolean(x));
       }
 
       // Update content if there were accepted suggestions
-      if (acceptedResolutions.length > 0) {
+      if (acceptedSorted.length > 0) {
         onContentChange(newContent);
       }
 
-      // Update local state optimistically for all resolutions
+      // Apply rejections/deletions and mark accepted in state
       setState(prev => {
         let newAccepted = [...prev.acceptedSuggestions];
         let newRejected = [...prev.rejectedSuggestions];
-        let newAllSuggestions = [...prev.allSuggestions];
+        let newAllSuggestions = [...workingSuggestions];
 
         resolutions.forEach(({ suggestionId, action }) => {
-          // Remove from all arrays first
+          // Remove from arrays first
           newAccepted = newAccepted.filter(id => id !== suggestionId);
           newRejected = newRejected.filter(id => id !== suggestionId);
 
@@ -562,7 +620,8 @@ export function useSuggestionManager(
         };
       });
 
-      // Update optimized state in batch
+      // Keep optimized state in sync
+      optimizedState.updateSuggestions(workingSuggestions);
       optimizedState.batchMarkSuggestions(resolutions);
 
       // Use optimistic resolution for backend updates

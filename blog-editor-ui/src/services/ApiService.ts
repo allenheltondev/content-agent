@@ -117,7 +117,8 @@ export class ApiService {
     endpoint: string,
     config: Omit<RequestConfig, 'headers'> & { headers?: Record<string, string> }
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    const normalizedEndpoint = this.normalizeEndpoint(endpoint);
+    const url = `${this.baseUrl}${normalizedEndpoint}`;
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= this.retryConfig.maxRetries + 1; attempt++) {
@@ -199,8 +200,8 @@ export class ApiService {
         const delay = this.calculateDelay(attempt);
         console.warn(`Network error, retrying in ${delay}ms (attempt ${attempt}/${this.retryConfig.maxRetries}):`, error);
         await this.sleep(delay);
-      }
     }
+  }
 
     // If we get here, all retries failed
     const apiError: ApiError = {
@@ -208,6 +209,31 @@ export class ApiService {
       code: 'NETWORK_ERROR'
     };
     throw apiError;
+  }
+
+  /**
+   * Normalize endpoint path based on baseUrl to avoid local/production prefix mismatches
+   * - If baseUrl already contains '/api' suffix, avoid double '/api' in path
+   * - If running against local SAM on :3000, strip leading '/api' from endpoints
+   */
+  private normalizeEndpoint(endpoint: string): string {
+    const ep = endpoint || '';
+    const base = this.baseUrl || '';
+    const startsWithApi = ep.startsWith('/api/');
+    const baseEndsWithApi = /\/api\/?$/.test(base);
+    const isLocalSam = /localhost:3000|127\.0\.0\.1:3000/.test(base);
+
+    // If base already ends with /api and endpoint begins with /api/, drop one prefix
+    if (baseEndsWithApi && startsWithApi) {
+      return ep.replace(/^\/api\//, '/');
+    }
+
+    // If local SAM (no stage prefix), strip the /api prefix from endpoint
+    if (isLocalSam && startsWithApi) {
+      return ep.replace(/^\/api\//, '/');
+    }
+
+    return ep;
   }
 
   /**
