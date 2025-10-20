@@ -24,6 +24,13 @@ export const handler = async (event) => {
     }
 
     const { status } = requestBody;
+
+    console.log('update-suggestion-status: initiated', {
+      tenantId,
+      postId,
+      suggestionId,
+      status
+    });
     const suggestionKey = {
       pk: `${tenantId}#${postId}`,
       sk: `suggestion#${suggestionId}`
@@ -76,6 +83,14 @@ export const handler = async (event) => {
       console.error('Error updating statistics for suggestion status change:', statsError);
       // Don't fail the API response if statistics update fails
     }
+
+    console.log('update-suggestion-status: completed', {
+      tenantId,
+      postId,
+      suggestionId,
+      from: currentStatus,
+      to: status
+    });
 
     return formatEmptyResponse(204);
   } catch (error) {

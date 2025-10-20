@@ -312,7 +312,7 @@ export const SuggestionHighlightOverlay = ({
             return (
               <span
                 key={`${highlight.id}-${index}`}
-                className={`suggestion-highlight relative inline-block cursor-pointer transition-all duration-300 ease-out border-b-2 border-dashed rounded-sm px-1 py-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-opacity-50 ${isHovered ? 'scale-105 shadow-lg z-20' : 'hover:scale-102'}`}
+                className={`suggestion-highlight relative inline-block cursor-pointer transition-all duration-300 ease-out border-b-2 border-dashed rounded-sm px-1 py-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-opacity-50 pointer-events-auto ${isHovered ? 'scale-105 shadow-lg z-20' : 'hover:scale-102'}`}
                 style={{
                   backgroundColor: style.backgroundColor,
                   borderColor: style.borderColor,
@@ -348,7 +348,7 @@ export const SuggestionHighlightOverlay = ({
           }
 
           return (
-            <span key={index} className="text-gray-900">
+            <span key={index} className="text-gray-900 pointer-events-none">
               {segment.text}
             </span>
           );

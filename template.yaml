@@ -4,9 +4,12 @@ Description: >
   Autonomous AI Agent that proofreads and helps with blog posts
 
 Parameters:
-  Origin:
+  Domain:
     Type: String
     Default: "http://localhost:5173"
+  CORSOrigin:
+    Type: String
+    Default: "*"
   SerpApiKey:
     Type: String
     NoEcho: true
@@ -49,12 +52,12 @@ Globals:
     Environment:
       Variables:
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
-        ORIGIN: !Ref Origin
+        ORIGIN: !Ref CORSOrigin
   Api:
     Cors:
       AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
       AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-      AllowOrigin: !Sub "'${Origin}'"
+      AllowOrigin: !Sub "'${CORSOrigin}'"
 
 Mappings:
   RegionToEndPoint:
@@ -163,10 +166,10 @@ Resources:
       IdTokenValidity: 1
       RefreshTokenValidity: 30
       CallbackURLs:
-        - !Ref Origin
+        - !Ref Domain
         - "http://localhost:5173"
       LogoutURLs:
-        - !Ref Origin
+        - !Ref Domain
         - "http://localhost:5173"
       SupportedIdentityProviders:
         - COGNITO

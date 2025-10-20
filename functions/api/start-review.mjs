@@ -1,7 +1,7 @@
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { AuthClient, CredentialProvider, ExpiresIn } from '@gomomento/sdk';
+import { AuthClient, CredentialProvider, ExpiresIn, TopicRole } from '@gomomento/sdk';
 import { formatResponse } from '../utils/responses.mjs';
 
 const ddb = new DynamoDBClient();
@@ -38,7 +38,7 @@ export const handler = async (event) => {
     try {
       const tokenResponse = await authClient.generateDisposableToken({
         permissions: [{
-          role: 'subscribeonly',
+          role: TopicRole.SubscribeOnly,
           cache: process.env.MOMENTO_CACHE_NAME,
           topic: topicName
         }]

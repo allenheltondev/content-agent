@@ -163,6 +163,12 @@ export interface IntegratedActiveSuggestionSystemProps {
    * Whether to show the system (can be used to hide when no suggestions)
    */
   visible?: boolean;
+
+  /**
+   * Whether to render the ActiveSuggestionArea panel. Useful to suppress the
+   * floating panel while the editor has focus so the user can type uninterrupted.
+   */
+  showActiveArea?: boolean;
 }
 
 /**
@@ -204,7 +210,8 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
   isProcessing = false,
   config = {},
   className = '',
-  visible = true
+  visible = true,
+  showActiveArea = true
 }) => {
   // Merge configuration with defaults
   const finalConfig = useMemo(() => ({
@@ -435,7 +442,7 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
       )}
 
       {/* Active Suggestion Area */}
-      {activeSuggestionManager.hasActiveSuggestion && (
+      {showActiveArea && activeSuggestionManager.hasActiveSuggestion && (
         <ActiveSuggestionArea
           activeSuggestion={activeSuggestionManager.activeSuggestion}
           totalSuggestions={activeSuggestionManager.navigationContext.totalCount}

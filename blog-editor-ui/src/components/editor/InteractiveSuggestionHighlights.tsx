@@ -445,6 +445,7 @@ export const InteractiveSuggestionHighlights = ({
                   ${isHovered && !isActive ? 'shadow-sm z-10' : ''}
                   ${hasOverlapping ? 'border-double' : ''}
                   focus:outline-none focus:ring-2 focus:ring-opacity-50
+                  pointer-events-auto
                 `}
                 style={{
                   backgroundColor: currentStyle.backgroundColor,
@@ -525,7 +526,7 @@ export const InteractiveSuggestionHighlights = ({
           }
 
           return (
-            <span key={index} className="text-gray-900">
+            <span key={index} className="text-gray-900 pointer-events-none">
               {segment.text}
             </span>
           );

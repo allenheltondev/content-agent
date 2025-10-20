@@ -125,22 +125,24 @@ export const updateSuggestionStatus = async (tenantId, suggestionType, newStatus
     '#type': suggestionType
   };
   const expressionAttributeValues = {
-    ':now': now,
-    ':one': 1,
-    ':minusOne': -1
+    ':now': now
   };
 
   // Increment new status counters
   if (newStatus === 'accepted') {
     addExpressions.push('acceptedSuggestions :one');
     addExpressions.push('suggestionsByType.#type.accepted :one');
+    expressionAttributeValues[':one'] = 1;
   } else if (newStatus === 'rejected') {
     addExpressions.push('rejectedSuggestions :one');
     addExpressions.push('suggestionsByType.#type.rejected :one');
+    expressionAttributeValues[':one'] = 1;
   } else if (newStatus === 'deleted') {
     addExpressions.push('deletedSuggestions :one');
+    expressionAttributeValues[':one'] = 1;
   } else if (newStatus === 'skipped') {
     addExpressions.push('skippedSuggestions :one');
+    expressionAttributeValues[':one'] = 1;
   }
 
   // Decrement old status counters if provided
@@ -148,13 +150,17 @@ export const updateSuggestionStatus = async (tenantId, suggestionType, newStatus
     if (oldStatus === 'accepted') {
       addExpressions.push('acceptedSuggestions :minusOne');
       addExpressions.push('suggestionsByType.#type.accepted :minusOne');
+      expressionAttributeValues[':minusOne'] = -1;
     } else if (oldStatus === 'rejected') {
       addExpressions.push('rejectedSuggestions :minusOne');
       addExpressions.push('suggestionsByType.#type.rejected :minusOne');
+      expressionAttributeValues[':minusOne'] = -1;
     } else if (oldStatus === 'deleted') {
       addExpressions.push('deletedSuggestions :minusOne');
+      expressionAttributeValues[':minusOne'] = -1;
     } else if (oldStatus === 'skipped') {
       addExpressions.push('skippedSuggestions :minusOne');
+      expressionAttributeValues[':minusOne'] = -1;
     }
   }
 

@@ -187,6 +187,13 @@ export function useAutoSaveManager({
       return;
     }
 
+    // For existing posts, establish a baseline on first load to avoid an unnecessary PUT
+    if (postId && !lastSavedStateRef.current) {
+      lastSavedStateRef.current = { ...currentState };
+      setHasUnsavedChanges(false);
+      return; // Skip scheduling a save on initial load
+    }
+
     // Clear existing timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -203,7 +210,7 @@ export function useAutoSaveManager({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [currentState, enabled, debounceMs, saveWithRetry]);
+  }, [currentState, enabled, debounceMs, saveWithRetry, postId]);
 
   // Force save function (for manual saves) - use memoized currentState
   const forceSave = useCallback(async () => {

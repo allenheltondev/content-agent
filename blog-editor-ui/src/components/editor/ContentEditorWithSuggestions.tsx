@@ -38,6 +38,20 @@ export const ContentEditorWithSuggestions = ({
   const [, setScrollTop] = useState(0);
   const [, setScrollLeft] = useState(0);
 
+  // Track focus/typing
+  const [isFocused, setIsFocused] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Locally adjusted suggestions for debounce reindexing
+  const [adjustedSuggestions, setAdjustedSuggestions] = useState<Suggestion[]>(suggestions);
+  const lastContentRef = useRef<string>(content);
+
+  // Reset adjusted suggestions when upstream suggestions change
+  useEffect(() => {
+    setAdjustedSuggestions(suggestions);
+  }, [suggestions]);
+
   // Sync overlay scroll with textarea scroll
   const handleScroll = useCallback(() => {
     if (textareaRef.current && overlayRef.current) {
@@ -71,7 +85,57 @@ export const ContentEditorWithSuggestions = ({
   // Handle content changes
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
+    setIsTyping(true);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 400);
   };
+
+  // Reindex suggestions after content changes (debounced typing window)
+  useEffect(() => {
+    if (isTyping) return;
+    const prev = lastContentRef.current;
+    const next = content;
+    if (prev === next) return;
+
+    // Compute first/last diff window
+    let i = 0;
+    const minLen = Math.min(prev.length, next.length);
+    while (i < minLen && prev[i] === next[i]) i++;
+
+    let jPrev = prev.length - 1;
+    let jNext = next.length - 1;
+    while (jPrev >= i && jNext >= i && prev[jPrev] === next[jNext]) { jPrev--; jNext--; }
+
+    const changeStart = i;
+    const delta = next.length - prev.length;
+
+    const updated = adjustedSuggestions.map(s => {
+      let start = s.startOffset;
+      let end = s.endOffset;
+
+      if (start >= changeStart) {
+        start = start + delta;
+        end = end + delta;
+      } else if (end > changeStart) {
+        end = end + delta;
+      }
+
+      start = Math.max(0, Math.min(start, next.length));
+      end = Math.max(start, Math.min(end, next.length));
+      return { ...s, startOffset: start, endOffset: end };
+    });
+
+    setAdjustedSuggestions(updated);
+    lastContentRef.current = next;
+  }, [content, adjustedSuggestions, isTyping]);
+
+  // Focus handlers
+  const handleFocus = useCallback(() => setIsFocused(true), []);
+  const handleBlur = useCallback(() => { setIsFocused(false); setIsTyping(false); }, []);
+
+  const overlayPointerClass = useMemo(() => (isFocused ? 'pointer-events-none' : 'pointer-events-auto'), [isFocused]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -122,13 +186,13 @@ export const ContentEditorWithSuggestions = ({
       {/* Container for textarea and overlay */}
       <div className="relative">
         {/* Integrated Active Suggestion System or Legacy Overlay */}
-        {showSuggestions && suggestions.length > 0 && (
+        {showSuggestions && adjustedSuggestions.length > 0 && !isTyping && (
           <>
             {useActiveSuggestionSystem ? (
               // New integrated active suggestion system
               <div
                 ref={overlayRef}
-                className="absolute inset-0 pointer-events-auto overflow-visible"
+                className={`absolute inset-0 pointer-events-none overflow-visible`}
                 style={{
                   zIndex: 10,
                   paddingTop: '24px', // Match textarea padding
@@ -144,7 +208,7 @@ export const ContentEditorWithSuggestions = ({
                 }}
               >
                 <IntegratedActiveSuggestionSystem
-                  suggestions={[...suggestions].sort((a,b)=>a.startOffset-b.startOffset)}
+                  suggestions={[...adjustedSuggestions].sort((a,b)=>a.startOffset-b.startOffset)}
                   content={content}
                   onAcceptSuggestion={onAcceptSuggestion}
                   onRejectSuggestion={onRejectSuggestion}
@@ -152,7 +216,7 @@ export const ContentEditorWithSuggestions = ({
                     // Handle suggestion editing - for now, just accept with the new text
                     onAcceptSuggestion(suggestionId);
                   }}
-                  className="pointer-events-auto"
+                  className="pointer-events-none"
                   config={{
                     enableAutoAdvance: true,
                     enableScrollToActive: true,
@@ -160,13 +224,15 @@ export const ContentEditorWithSuggestions = ({
                     enablePerformanceMonitoring: true,
                     enableResponsivePositioning: true
                   }}
+                  visible={!isTyping}
+                  showActiveArea={!isFocused}
                 />
               </div>
             ) : (
               // Legacy suggestion overlay system
               <div
                 ref={overlayRef}
-                className="absolute inset-0 pointer-events-auto overflow-visible"
+                className={`absolute inset-0 pointer-events-none overflow-visible`}
                 style={{
                   zIndex: 10,
                   paddingTop: '24px', // Match textarea padding
@@ -181,14 +247,14 @@ export const ContentEditorWithSuggestions = ({
                 }}
               >
                 <SuggestionHighlightOverlay
-                  suggestions={[...suggestions].sort((a,b)=>a.startOffset-b.startOffset)}
+                  suggestions={[...adjustedSuggestions].sort((a,b)=>a.startOffset-b.startOffset)}
                   content={content}
                   onSuggestionClick={(suggestionId) => {
                     // Handle click to accept suggestion
                     handleAcceptSuggestion(suggestionId);
                   }}
                   onSuggestionExpand={onSuggestionExpand}
-                  className="pointer-events-auto"
+                  className="pointer-events-none"
                 />
               </div>
             )}
@@ -202,22 +268,24 @@ export const ContentEditorWithSuggestions = ({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onScroll={handleScroll}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           placeholder={placeholder}
           disabled={disabled}
           className={`
             w-full min-h-[500px] p-6 text-gray-900 placeholder-gray-400
             border-none outline-none focus:ring-0 resize-none font-mono text-sm leading-relaxed
             bg-transparent disabled:bg-gray-50 disabled:text-gray-500 relative
-            ${showSuggestions && suggestions.length > 0 ? 'text-transparent caret-gray-900' : 'bg-white'}
+            ${showSuggestions && adjustedSuggestions.length > 0 && !isTyping ? 'text-transparent caret-gray-900' : 'bg-white'}
           `}
           style={{
             fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-            zIndex: showSuggestions && suggestions.length > 0 ? 2 : 1
+            zIndex: showSuggestions && adjustedSuggestions.length > 0 && !isTyping ? 2 : 1
           }}
         />
 
         {/* Background for textarea when suggestions are shown */}
-        {showSuggestions && suggestions.length > 0 && (
+        {showSuggestions && adjustedSuggestions.length > 0 && !isTyping && (
           <div
             className="absolute inset-0 bg-white border-none"
             style={{ zIndex: 0 }}
@@ -235,3 +303,4 @@ export const ContentEditorWithSuggestions = ({
     </div>
   );
 };
+

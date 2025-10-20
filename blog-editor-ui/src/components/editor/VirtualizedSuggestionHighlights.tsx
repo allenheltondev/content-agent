@@ -345,6 +345,7 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
                   border-b-2 border-dashed cursor-pointer
                   ${item.isActive ? 'shadow-md z-20' : 'hover:shadow-sm z-10'}
                   focus:outline-none focus:ring-2 focus:ring-opacity-50
+                  pointer-events-auto
                 `}
                 style={{
                   backgroundColor,
@@ -383,7 +384,7 @@ export const VirtualizedSuggestionHighlights: React.FC<VirtualizedSuggestionHigh
           }
 
           return (
-            <span key={index} className="text-gray-900">
+            <span key={index} className="text-gray-900 pointer-events-none">
               {segment.text}
             </span>
           );

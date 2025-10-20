@@ -304,8 +304,9 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
           ${transitionClassName}
           ${isProcessing ? 'suggestion-resolving' : ''}
           ${className}
+          pointer-events-auto
         `}
-        style={{ ...combinedStyles, zIndex: 2000 }}
+        style={{ ...combinedStyles, zIndex: 2000, pointerEvents: 'auto' }}
         data-suggestion-area="true"
         data-viewport-breakpoint={viewport.breakpoint}
         data-positioning-strategy={positioning.strategy}

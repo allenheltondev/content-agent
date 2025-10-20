@@ -15,19 +15,19 @@ x-amazon-apigateway-gateway-responses:
       application/json: '{ "message": "$context.error.validationErrorString" }'
     responseParameters:
       gatewayresponse.header.Access-Control-Allow-Origin:
-        Fn::Sub: "'${Origin}'"
+        Fn::Sub: "'${CORSOrigin}'"
       gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
       gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
   DEFAULT_4XX:
     responseParameters:
       gatewayresponse.header.Access-Control-Allow-Origin:
-        Fn::Sub: "'${Origin}'"
+        Fn::Sub: "'${CORSOrigin}'"
       gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
       gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
   DEFAULT_5XX:
     responseParameters:
       gatewayresponse.header.Access-Control-Allow-Origin:
-        Fn::Sub: "'${Origin}'"
+        Fn::Sub: "'${CORSOrigin}'"
       gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
       gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
 
