@@ -4,6 +4,7 @@ import { suggestionService } from '../services/SuggestionService';
 import { apiService } from '../services/ApiService';
 import { useOptimisticSuggestionResolution } from './useOptimisticSuggestionResolution';
 import { useOptimizedSuggestionState } from './useOptimizedSuggestionState';
+import { autoCorrectSuggestionPositions } from '../utils/suggestionValidation';
 
 /**
  * Undo action for suggestion acceptance
@@ -63,6 +64,65 @@ export interface SuggestionManagerConfig {
 // Note: retry config handled in optimistic resolution system
 
 // Note: retryApiCall is now handled by the optimistic resolution system
+
+/**
+ * Remove duplicate suggestions that have the same text to replace and same replacement
+ */
+function removeDuplicateSuggestions(suggestions: Suggestion[]): Suggestion[] {
+  const seen = new Map<string, Suggestion>();
+  const duplicates: string[] = [];
+
+  for (const suggestion of suggestions) {
+    // Create a key based on the text being replaced and the replacement text
+    // Also include position to handle cases where same text appears multiple times
+    const key = `${suggestion.textToReplace.trim()}|${suggestion.replaceWith.trim()}|${suggestion.startOffset}-${suggestion.endOffset}`;
+
+    if (seen.has(key)) {
+      // This is a duplicate - keep the first one (usually has better positioning)
+      duplicates.push(suggestion.id);
+      console.log(`Duplicate suggestion detected: "${suggestion.textToReplace}" -> "${suggestion.replaceWith}" at position ${suggestion.startOffset}-${suggestion.endOffset}`);
+    } else {
+      seen.set(key, suggestion);
+    }
+  }
+
+  // If we still have too many duplicates, try a more lenient approach
+  if (duplicates.length > 0) {
+    // Group by text replacement only (ignoring position) and keep the best one from each group
+    const textOnlyGroups = new Map<string, Suggestion[]>();
+
+    for (const suggestion of suggestions.filter(s => !duplicates.includes(s.id))) {
+      const textKey = `${suggestion.textToReplace.trim()}|${suggestion.replaceWith.trim()}`;
+      if (!textOnlyGroups.has(textKey)) {
+        textOnlyGroups.set(textKey, []);
+      }
+      textOnlyGroups.get(textKey)!.push(suggestion);
+    }
+
+    // For each group with multiple suggestions, keep only the one with highest priority
+    const additionalDuplicates: string[] = [];
+    for (const [, groupSuggestions] of textOnlyGroups) {
+      if (groupSuggestions.length > 1) {
+        // Sort by priority (high > medium > low) and keep the first one
+        const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
+        const sorted = groupSuggestions.sort((a, b) =>
+          (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0)
+        );
+
+        // Mark all but the first as duplicates
+        for (let i = 1; i < sorted.length; i++) {
+          additionalDuplicates.push(sorted[i].id);
+          console.log(`Additional duplicate detected (lower priority): "${sorted[i].textToReplace}" -> "${sorted[i].replaceWith}"`);
+        }
+      }
+    }
+
+    duplicates.push(...additionalDuplicates);
+  }
+
+  // Return only unique suggestions
+  return suggestions.filter(s => !duplicates.includes(s.id));
+}
 
 /**
  * Get user-friendly error message for suggestion actions
@@ -239,16 +299,40 @@ export function useSuggestionManager(
         controller.signal
       );
 
+      // First, auto-correct suggestion positions if they don't match the current content
+      const { corrected: validatedSuggestions, uncorrectable } = autoCorrectSuggestionPositions(response.suggestions, content);
+
+      if (uncorrectable.length > 0) {
+        console.warn(`${uncorrectable.length} suggestions could not be auto-corrected and will be filtered out`);
+      }
+
+      // Then filter out duplicate suggestions after position correction
+      const uniqueSuggestions = removeDuplicateSuggestions(validatedSuggestions);
+      const duplicateCount = validatedSuggestions.length - uniqueSuggestions.length;
+
+      if (duplicateCount > 0) {
+        console.log(`Automatically rejected ${duplicateCount} duplicate suggestions`);
+      }
+
       // Store all suggestions and summary from API response
       setState(prev => ({
         ...prev,
-        allSuggestions: response.suggestions,
+        allSuggestions: uniqueSuggestions,
         summary: response.summary,
         isLoading: false
       }));
 
       // Update optimized state with new suggestions
-      optimizedState.updateSuggestions(response.suggestions);
+      optimizedState.updateSuggestions(uniqueSuggestions);
+
+      // Debug logging
+      console.log(`Loaded suggestions for post ${config.postId}:`, {
+        total: response.suggestions.length,
+        afterAutoCorrection: validatedSuggestions.length,
+        afterDeduplication: uniqueSuggestions.length,
+        uncorrectable: uncorrectable.length,
+        duplicatesRemoved: duplicateCount
+      });
 
       // Mark request as complete and clean up controller reference
       requestManagerRef.current.isRequestInProgress = false;
@@ -271,7 +355,7 @@ export function useSuggestionManager(
         setState(prev => ({ ...prev, isLoading: false }));
       }
     }
-  }, [config.postId]); // Only depend on postId
+  }, [config.postId, content]); // Depend on postId and content for validation
 
   /**
    * Accept a suggestion and apply it to content

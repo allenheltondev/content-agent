@@ -1,0 +1,198 @@
+/* High Contrast Mode Styles */
+
+/* Apply high contrast styles when the high-contrast class is present */
+.high-contrast {
+  /* Force high contrast colors */
+  --tw-bg-opacity: 1;
+  --tw-text-opacity: 1;
+  --tw-border-opacity: 1;
+}
+
+/* High contrast mode toggle buttons */
+.high-contrast .mode-toggle-edit.active {
+  background-color: #000080 !important; /* Dark blue */
+  color: #ffffff !important;
+  border: 3px solid #ffffff !important;
+}
+
+.high-contrast .mode-toggle-review.active {
+  background-color: #006400 !important; /* Dark green */
+  color: #ffffff !important;
+  border: 3px solid #ffffff !important;
+}
+
+.high-contrast .mode-toggle-edit:not(.active),
+.high-contrast .mode-toggle-review:not(.active) {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border: 3px solid #000000 !important;
+}
+
+.high-contrast .mode-toggle-edit:focus,
+.high-contrast .mode-toggle-review:focus {
+  outline: 4px solid #ffff00 !important; /* Yellow focus outline */
+  outline-offset: 2px !important;
+}
+
+/* High contrast suggestion highlights */
+.high-contrast .suggestion-llm {
+  background-color: #e6f3ff !important;
+  border: 3px solid #000080 !important;
+}
+
+.high-contrast .suggestion-brand {
+  background-color: #f3e6ff !important;
+  border: 3px solid #800080 !important;
+}
+
+.high-contrast .suggestion-fact {
+  background-color: #fff3e6 !important;
+  border: 3px solid #ff8000 !important;
+}
+
+.high-contrast .suggestion-grammar {
+  background-color: #e6ffe6 !important;
+  border: 3px solid #008000 !important;
+}
+
+.high-contrast .suggestion-spelling {
+  background-color: #ffe6e6 !important;
+  border: 3px solid #ff0000 !important;
+}
+
+/* High contrast focus indicators */
+.high-contrast *:focus {
+  outline: 3px solid #ffff00 !important;
+  outline-offset: 2px !important;
+}
+
+/* High contrast loading indicators */
+.high-contrast .loading-spinner {
+  border: 4px solid #000000 !important;
+  border-top: 4px solid #0000ff !important;
+}
+
+/* High contrast tooltips */
+.high-contrast .tooltip {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  border: 2px solid #ffffff !important;
+}
+
+/* High contrast error states */
+.high-contrast .error-indicator {
+  background-color: #ff0000 !important;
+  color: #ffffff !important;
+  border: 2px solid #ffffff !important;
+}
+
+/* High contrast success states */
+.high-contrast .success-indicator {
+  background-color: #008000 !important;
+  color: #ffffff !important;
+  border: 2px solid #ffffff !important;
+}
+
+/* High contrast warning states */
+.high-contrast .warning-indicator {
+  background-color: #ff8000 !important;
+  color: #ffffff !important;
+  border: 2px solid #ffffff !important;
+}
+
+/* High contrast buttons */
+.high-contrast button {
+  border: 2px solid #000000 !important;
+}
+
+.high-contrast button:hover {
+  background-color: #f0f0f0 !important;
+}
+
+.high-contrast button:disabled {
+  background-color: #cccccc !important;
+  color: #666666 !important;
+  border-color: #999999 !important;
+}
+
+/* High contrast form inputs */
+.high-contrast input,
+.high-contrast textarea,
+.high-contrast select {
+  border: 2px solid #000000 !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.high-contrast input:focus,
+.high-contrast textarea:focus,
+.high-contrast select:focus {
+  outline: 3px solid #ffff00 !important;
+  outline-offset: 2px !important;
+}
+
+/* High contrast links */
+.high-contrast a {
+  color: #0000ff !important;
+  text-decoration: underline !important;
+}
+
+.high-contrast a:visited {
+  color: #800080 !important;
+}
+
+.high-contrast a:hover,
+.high-contrast a:focus {
+  color: #ff0000 !important;
+  background-color: #ffff00 !important;
+}
+
+/* High contrast text selection */
+.high-contrast ::selection {
+  background-color: #000080 !important;
+  color: #ffffff !important;
+}
+
+/* High contrast scrollbars (webkit browsers) */
+.high-contrast ::-webkit-scrollbar {
+  width: 16px !important;
+}
+
+.high-contrast ::-webkit-scrollbar-track {
+  background-color: #ffffff !important;
+  border: 1px solid #000000 !important;
+}
+
+.high-contrast ::-webkit-scrollbar-thumb {
+  background-color: #000000 !important;
+  border: 1px solid #ffffff !important;
+}
+
+.high-contrast ::-webkit-scrollbar-thumb:hover {
+  background-color: #333333 !important;
+}
+
+/* Ensure text has sufficient contrast */
+.high-contrast .text-gray-500,
+.high-contrast .text-gray-400,
+.high-contrast .text-gray-300 {
+  color: #000000 !important;
+}
+
+/* High contrast mode for reduced motion users */
+@media (prefers-reduced-motion: reduce) {
+  .high-contrast * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print styles for high contrast */
+@media print {
+  .high-contrast * {
+    background: white !important;
+    color: black !important;
+    border-color: black !important;
+  }
+}

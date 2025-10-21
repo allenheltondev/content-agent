@@ -71,6 +71,7 @@ export default {
         'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
         'expand': 'expand 0.3s ease-out',
         'collapse': 'collapse 0.3s ease-in',
+        'shimmer': 'shimmer 1.5s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -119,6 +120,14 @@ export default {
             maxHeight: '0',
             opacity: '0',
             transform: 'scaleY(0.8)',
+          },
+        },
+        shimmer: {
+          '0%': {
+            backgroundPosition: '-200% 0',
+          },
+          '100%': {
+            backgroundPosition: '200% 0',
           },
         },
       },

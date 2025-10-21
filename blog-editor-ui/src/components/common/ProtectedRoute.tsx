@@ -12,16 +12,19 @@ export const ProtectedRoute = ({
   children,
   requireProfileComplete = true
 }: ProtectedRouteConfig) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isInitialized, hasPersistedAuth } = useAuth();
   const { isProfileComplete, isCheckingProfile } = useProfile();
 
   // Show loading spinner while checking authentication or profile
-  if (isLoading || isCheckingProfile) {
+  if (isLoading || isCheckingProfile || !isInitialized) {
     return <LoadingSpinner />;
   }
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated, but if we have persisted auth, hold to avoid premature redirect
   if (!isAuthenticated) {
+    if (hasPersistedAuth) {
+      return <LoadingSpinner />; // Give Auth another pass to hydrate from persisted state
+    }
     return <Navigate to="/login" replace />;
   }
 

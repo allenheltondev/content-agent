@@ -11,3 +11,5 @@ export { Toast, ToastContainer } from './Toast';
 export { ConfirmationModal } from './ConfirmationModal';
 export { Logo } from './Logo';
 export { InfoBox } from './InfoBox';
+export { default as SkeletonBase } from './SkeletonBase';
+export type { SkeletonBaseProps } from './SkeletonBase';

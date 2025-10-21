@@ -10,3 +10,11 @@ export {
   type ConflictResolution
 } from './conflictResolution';
 export * from './suggestionAccessibility';
+export {
+  calculateContentDiff,
+  mergeContentDiffs,
+  hasSignificantChanges,
+  getTotalChangedCharacters,
+  getChangeSummary,
+  applyContentDiffs
+} from './contentDiff';

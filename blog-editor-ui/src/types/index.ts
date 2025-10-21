@@ -142,6 +142,10 @@ export interface AuthContextType {
   user: CognitoUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  // Becomes true after initial auth check completes
+  isInitialized?: boolean;
+  // True if there is persisted auth state in localStorage
+  hasPersistedAuth?: boolean;
 
   // Enhanced flow management
   authFlowState: AuthFlowState;
@@ -254,6 +258,31 @@ export interface ErrorRecoveryStrategy {
   action: 'redirect-to-login' | 'retry-confirmation' | 'auto-resend' | 'retry-operation' | 'contact-support';
   showResendOption?: boolean;
   retryDelay?: number;
+}
+
+// Editor mode types
+export type EditorMode = 'edit' | 'review';
+
+export interface ContentDiff {
+  type: 'insert' | 'delete' | 'replace';
+  startOffset: number;
+  endOffset: number;
+  oldText: string;
+  newText: string;
+  timestamp: number;
+}
+
+export interface EditorModeState {
+  currentMode: EditorMode;
+  isTransitioning: boolean;
+  transitionStartTime: number | null;
+  lastModeSwitch: number;
+  contentAtLastReview: string;
+  contentChangesSinceReview: ContentDiff[];
+  lastEditTimestamp: number;
+  suggestionVersion: number;
+  pendingRecalculation: boolean;
+  recalculationInProgress: boolean;
 }
 
 // Local storage types
@@ -398,4 +427,49 @@ export interface ReviewServiceConfig {
   getAuthToken: () => Promise<string>;
   pollingInterval?: number;
   maxRetries?: number;
+}
+
+// Skeleton loading types
+export interface SkeletonConfig {
+  animationDuration: number;
+  animationDelay: number;
+  shimmerColor: string;
+  backgroundColor: string;
+  borderRadius: string;
+  enableAnimations: boolean;
+}
+
+export type LoadingState = 'initial' | 'loading' | 'loaded' | 'error';
+
+export interface EditorLoadingState {
+  overall: LoadingState;
+  post: LoadingState;
+  suggestions: LoadingState;
+  profile: LoadingState;
+}
+
+// Mode transition types
+export interface TransitionProgress {
+  phase: 'starting' | 'recalculating' | 'updating' | 'completing' | 'error';
+  message: string;
+  progress: number; // 0-100
+  canCancel: boolean;
+}
+
+export interface TransitionResult {
+  success: boolean;
+  updatedSuggestions?: Suggestion[];
+  error?: string;
+  requiresUserAction?: boolean;
+  retryable?: boolean;
+}
+
+export interface TransitionConfig {
+  enableAnimations: boolean;
+  animationDuration: number;
+  enableRetry: boolean;
+  maxRetryAttempts: number;
+  retryDelay: number;
+  enableProgressReporting: boolean;
+  enableCancellation: boolean;
 }

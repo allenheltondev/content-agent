@@ -14,6 +14,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<CognitoUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [hasPersistedAuth, setHasPersistedAuth] = useState<boolean>(() => {
+    try {
+      return !!localStorage.getItem('auth_state');
+    } catch {
+      return false;
+    }
+  });
 
   // Enhanced flow management state
   const [authFlowState, setAuthFlowState] = useState<AuthFlowState>('idle');
@@ -45,6 +53,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         version: '1.0', // Version for future compatibility
       };
       localStorage.setItem('auth_state', JSON.stringify(authState));
+      setHasPersistedAuth(true);
       console.log('Auth state persisted to localStorage with expiry:', new Date(authState.tokens.expiresAt || 0));
     } catch (error) {
       console.error('Failed to persist auth state:', error);
@@ -65,6 +74,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           version: '1.0',
         };
         localStorage.setItem('auth_state', JSON.stringify(retryAuthState));
+        setHasPersistedAuth(true);
         console.log('Auth state persisted after clearing old data');
       } catch (retryError) {
         console.error('Failed to persist auth state even after cleanup:', retryError);
@@ -118,6 +128,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const clearPersistedAuthState = () => {
     try {
       localStorage.removeItem('auth_state');
+      setHasPersistedAuth(false);
       console.log('Persisted auth state cleared');
     } catch (error) {
       console.error('Failed to clear persisted auth state:', error);
@@ -181,7 +192,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Check if user is authenticated on mount
   useEffect(() => {
     console.log('AuthProvider mounted, checking auth state...');
-    checkAuthState();
+    checkAuthState()
+      .catch((e) => console.error('Initial auth check failed:', e))
+      .finally(() => setIsInitialized(true));
 
     // Cleanup function for component unmount
     return () => {
@@ -344,6 +357,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (!skipPersistenceCheck) {
         const restoredState = restoreAuthState();
         if (restoredState) {
+          setHasPersistedAuth(true);
           console.log('Found persisted auth state, validating...');
 
           try {
@@ -890,6 +904,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     user,
     isLoading,
     isAuthenticated,
+    isInitialized,
+    hasPersistedAuth,
     authFlowState,
     pendingEmail,
     lastTokenRefresh,

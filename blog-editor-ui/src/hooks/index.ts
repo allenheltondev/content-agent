@@ -14,3 +14,5 @@ export { useOptimizedActiveSuggestionManager } from './useOptimizedActiveSuggest
 export { useSuggestionCache } from './useSuggestionCache';
 export { useSuggestionResolutionManager } from './useSuggestionResolutionManager';
 export { useOptimizedSuggestionState } from './useOptimizedSuggestionState';
+export { useContentChangeTracker, useDebouncedContentChangeTracker } from './useContentChangeTracker';
+export { useTransitionManager, useTransitionProgressDisplay, useTransitionErrorHandler } from './useTransitionManager';

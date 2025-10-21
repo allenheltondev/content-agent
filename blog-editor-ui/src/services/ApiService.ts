@@ -13,7 +13,8 @@ import type {
   CreateProfileRequest,
   UpdateProfileRequest,
   ProfileResponse,
-  StatsResponse
+  StatsResponse,
+  StartReviewResponse
 } from '../types';
 
 /**
@@ -406,8 +407,11 @@ export class ApiService {
       throw new Error('Skill level is required');
     }
 
-    const response = await this.post<ProfileResponse>('/api/profile', profileData, signal);
-    return response.profile;
+    // Create the profile first
+    await this.post<unknown>('/api/profile', profileData, signal);
+
+    // Then fetch the created profile with a short retry to handle eventual consistency
+    return await this.fetchProfileWithConsistencyRetry(signal);
   }
 
   /**
@@ -424,8 +428,11 @@ export class ApiService {
       throw new Error('At least one profile field must be updated');
     }
 
-    const response = await this.put<ProfileResponse>('/api/profile', profileData, signal);
-    return response.profile;
+    // Update the profile first
+    await this.put<unknown>('/api/profile', profileData, signal);
+
+    // Then re-fetch with a short retry to ensure we have the latest state
+    return await this.fetchProfileWithConsistencyRetry(signal);
   }
 
   /**
@@ -437,10 +444,53 @@ export class ApiService {
   }
 
   /**
+   * Fetch profile with short retries to handle eventual consistency (e.g., DynamoDB/APIGW)
+   * Retries 5 times with exponential backoff starting at 200ms, treating 404 as retryable here.
+   */
+  private async fetchProfileWithConsistencyRetry(signal?: AbortSignal): Promise<UserProfile> {
+    const maxAttempts = 5;
+    const baseDelayMs = 200;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await this.getProfile(signal);
+      } catch (err) {
+        lastError = err;
+        const isApiError = err && typeof err === 'object' && 'status' in (err as any);
+        const status = isApiError ? (err as any).status : undefined;
+
+        // Treat 404 (not yet visible) and network/server errors as retryable in this specific flow
+        const shouldRetry = status === 404 || (typeof status === 'number' && this.isRetryableStatus(status)) || !isApiError;
+
+        if (!shouldRetry || attempt === maxAttempts) {
+          break;
+        }
+
+        const delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), 1500);
+        await this.sleep(delay);
+      }
+    }
+
+    // Propagate the last error if all attempts failed
+    throw lastError as Error;
+  }
+
+  /**
    * Get statistics for the authenticated user
    */
   async getStats(signal?: AbortSignal): Promise<StatsResponse> {
     return this.get<StatsResponse>('/api/stats', signal);
+  }
+
+  /**
+   * Start review process for a post to generate new suggestions
+   */
+  async startReview(postId: string, signal?: AbortSignal): Promise<StartReviewResponse> {
+    if (!postId) {
+      throw new Error('Post ID is required');
+    }
+    return this.post<StartReviewResponse>(`/api/posts/${encodeURIComponent(postId)}/start-review`, {}, signal);
   }
 }
 

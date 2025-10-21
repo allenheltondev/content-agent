@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import type { BlogPost } from '../types';
+import type { BlogPost, Suggestion } from '../types';
 import { apiService } from '../services/ApiService';
+import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useAutoSaveManager } from '../hooks/useAutoSaveManager';
 // Local draft persistence disabled
@@ -13,7 +14,7 @@ import { ContentEditorWithSuggestions } from '../components/editor/ContentEditor
 import { EditorActions } from '../components/editor/EditorActions';
 import { MainEditorLayout } from '../components/editor/MainEditorLayout';
 import { UndoNotification } from '../components/editor/UndoNotification';
-import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { EditorSkeleton } from '../components/editor/EditorSkeleton';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
 import { AppHeader } from '../components/common';
 import { ConflictResolutionModal } from '../components/editor/ConflictResolutionModal';
@@ -25,12 +26,27 @@ import { EditorFallbackUI } from '../components/editor/EditorFallbackUI';
 import { ErrorReportingManager } from '../utils/errorReporting';
 import { EditorBackupManager } from '../utils/editorBackup';
 import { useRenderPerformanceMonitor } from '../hooks/useRenderPerformanceMonitor';
+import { EditorModeProvider, useEditorMode } from '../contexts/EditorModeContext';
+import { ModeToggleButton } from '../components/editor/ModeToggleButton';
+import { SkipLinks } from '../components/accessibility/SkipLinks';
+import { AccessibilitySettings } from '../components/accessibility/AccessibilitySettings';
 
 
-export const EditorPage = memo(() => {
+// Inner component that uses the EditorModeProvider context
+const EditorPageContent = memo(() => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showError, showSuccess } = useToast();
+  const { isLoading: isAuthLoading, isInitialized, isAuthenticated } = useAuth();
+
+  // Editor mode context
+  const {
+    currentMode,
+    markContentChanged,
+    switchToEditMode,
+    switchToReviewMode,
+    isTransitioning,
+  } = useEditorMode();
 
   // Check if this is a new post - memoize to prevent re-calculations
   const isNewPost = useMemo(() => id === 'new', [id]);
@@ -98,7 +114,6 @@ export const EditorPage = memo(() => {
   const [, setInitialLoadTimestamp] = useState<number>(0);
   const [showUndoNotification, setShowUndoNotification] = useState(false);
   const [isCreatingPost, setIsCreatingPost] = useState(false);
-  const [, setExpandedSuggestion] = useState<string | undefined>(undefined);
 
   // Workflow confirmation modals
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
@@ -108,6 +123,9 @@ export const EditorPage = memo(() => {
 
   // Navigation confirmation modal
   const [showNavigationConfirmation, setShowNavigationConfirmation] = useState(false);
+
+  // Accessibility settings modal
+  const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false);
 
   // Auto-save hook with enhanced post ID handling and retry logic
   const {
@@ -141,9 +159,20 @@ export const EditorPage = memo(() => {
 
   // Handle content changes - memoized to prevent unnecessary re-renders
   const handleContentChange = useCallback((newContent: string) => {
+    const oldContent = content;
     setContent(newContent);
     setIsDirty(true);
-  }, []);
+
+    // Track content changes for mode toggle functionality
+    if (currentMode === 'edit') {
+      markContentChanged();
+      // Also track the actual content diff for suggestion recalculation
+      if (oldContent !== newContent) {
+        // The context will handle the diff calculation
+        markContentChanged();
+      }
+    }
+  }, [content, currentMode, markContentChanged]);
 
   // Handle title changes - memoized to prevent unnecessary re-renders
   const handleTitleChange = useCallback((newTitle: string) => {
@@ -176,6 +205,16 @@ export const EditorPage = memo(() => {
     hasActiveSuggestions
   } = useSuggestionManager(content, handleContentChange, suggestionConfig);
 
+  // Update parent component's suggestions state when they change
+  useEffect(() => {
+    // This will be handled by a callback from parent
+    // For now, we'll use a custom event to communicate with parent
+    const event = new CustomEvent('suggestionsUpdated', {
+      detail: { suggestions, content }
+    });
+    window.dispatchEvent(event);
+  }, [suggestions, content]);
+
   // Review hook - for real-time AI analysis
   const {
     isReviewInProgress,
@@ -198,9 +237,26 @@ export const EditorPage = memo(() => {
   // Combined saving state - memoized to prevent re-renders
   const isSaving = useMemo(() => isAutoSaving || isCreatingPost, [isAutoSaving, isCreatingPost]);
 
+  // Track if suggestions are loading to prevent UI jumping
+  const [areSuggestionsLoading, setAreSuggestionsLoading] = useState(false);
+
+  // Combined loading state that includes suggestions loading
+  const isFullyLoading = useMemo(() => {
+    return isLoading || areSuggestionsLoading;
+  }, [isLoading, areSuggestionsLoading]);
+
   // Load post data on mount
   useEffect(() => {
     const loadPost = async () => {
+      // Wait until auth is fully initialized to avoid 401s on refresh
+      if (isAuthLoading || !isInitialized) {
+        return;
+      }
+
+      // If not authenticated, ProtectedRoute will handle redirect; avoid work here
+      if (!isAuthenticated) {
+        return;
+      }
       if (!id) {
         showError('No post ID provided');
         navigate('/dashboard');
@@ -250,21 +306,29 @@ export const EditorPage = memo(() => {
         setTitle(loadedPost.title);
         setContent(loadedPost.body);
 
-        // Load suggestions for existing posts
+        // Load suggestions for existing posts and track loading state
         if (loadedPost.status === 'draft' || loadedPost.status === 'review') {
-          loadSuggestions();
+          setAreSuggestionsLoading(true);
+          try {
+            await loadSuggestions();
+          } finally {
+            setAreSuggestionsLoading(false);
+          }
         }
       } catch (error) {
         console.error('Failed to load post:', error);
-        showError('Failed to load post');
-        navigate('/dashboard');
+        // Show error but do NOT redirect away; keep user on editor route
+        const msg = (error && typeof error === 'object' && 'message' in (error as any))
+          ? (error as any).message
+          : 'Failed to load post';
+        showError(msg);
       } finally {
         setIsLoading(false);
       }
     };
 
     loadPost();
-  }, [id, navigate, showError, isNewPost]);
+  }, [id, navigate, showError, isNewPost, loadSuggestions, isAuthLoading, isInitialized, isAuthenticated]);
 
   // Manual save (force save)
   const handleSave = useCallback(async () => {
@@ -336,13 +400,23 @@ export const EditorPage = memo(() => {
           handleSave();
         }
       }
+
+      // Ctrl/Cmd + M for mode toggle (only for existing posts)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'm' && !isNewPost && !isTransitioning) {
+        e.preventDefault();
+        if (currentMode === 'edit') {
+          switchToReviewMode();
+        } else {
+          switchToEditMode();
+        }
+      }
     };
 
     // Event listener will be cleaned up by React
     document.addEventListener('keydown', handleKeyDown);
 
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isDirty, isSaving, handleSave]);
+  }, [isDirty, isSaving, handleSave, isNewPost, isTransitioning, currentMode, switchToEditMode, switchToReviewMode]);
 
   // Clear save errors when user starts typing
   useEffect(() => {
@@ -599,8 +673,24 @@ export const EditorPage = memo(() => {
     }
   };
 
-  if (isLoading) {
-    return <LoadingSpinner />;
+  // Render loading skeleton while maintaining AppHeader
+  if (isFullyLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Professional App Header - always renders immediately */}
+        <AppHeader
+          editorContext={{
+            isNewPost,
+            postTitle: title.trim() || undefined,
+            isDirty: false, // No changes during loading
+            onNavigateBack: handleNavigateBack
+          }}
+        />
+
+        {/* Editor Skeleton */}
+        <EditorSkeleton isNewPost={isNewPost} />
+      </div>
+    );
   }
 
   if (!post) {
@@ -621,6 +711,9 @@ export const EditorPage = memo(() => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Skip Links for Accessibility */}
+      <SkipLinks />
+
       {/* Professional App Header */}
       <AppHeader
         editorContext={{
@@ -668,14 +761,37 @@ export const EditorPage = memo(() => {
           </div>
         )}
       >
-        <div className="max-w-7xl mx-auto">
-        <EditorHeader
-          isSaving={isSaving}
-          isDirty={isDirty}
-          lastSaved={lastSaved}
-          onSave={handleSave}
-          isNewPost={isNewPost}
-        />
+        {/* Smooth transition container for editor content */}
+        <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
+        <div className="flex items-center justify-between">
+          <EditorHeader
+            isSaving={isSaving}
+            isDirty={isDirty}
+            lastSaved={lastSaved}
+            onSave={handleSave}
+            isNewPost={isNewPost}
+          />
+
+          {/* Mode Toggle Button and Accessibility Settings - only show for existing posts */}
+          {!isNewPost && (
+            <div className="px-3 sm:px-4 lg:px-6 xl:px-8 flex items-center space-x-3">
+              <ModeToggleButton />
+
+              {/* Accessibility Settings Button */}
+              <button
+                onClick={() => setShowAccessibilitySettings(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md transition-colors"
+                aria-label="Open accessibility settings"
+                title="Accessibility settings"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Notifications removed */}
 
@@ -712,11 +828,19 @@ export const EditorPage = memo(() => {
                 onChange={handleContentChange}
                 onAcceptSuggestion={handleAcceptSuggestion}
                 onRejectSuggestion={handleRejectSuggestion}
-                onSuggestionExpand={setExpandedSuggestion}
                 placeholder={isNewPost ? "Start writing your new blog post..." : "Start writing your blog post..."}
                 disabled={isSaving}
                 showSuggestions={!isNewPost && hasActiveSuggestions}
-                useActiveSuggestionSystem={true}
+                // Mode-aware props - explicitly pass from context
+                editorMode={currentMode}
+                isTransitioning={isTransitioning}
+                suggestionVersion={1} // Context will track this
+                onSuggestionRecalculation={async () => {
+                  // Trigger suggestion reload when switching to Review mode
+                  if (!isNewPost && post) {
+                    await loadSuggestions();
+                  }
+                }}
               />
             </div>
           </MainEditorLayout>
@@ -809,8 +933,69 @@ export const EditorPage = memo(() => {
         onConfirm={handleNavigationConfirmed}
         onCancel={() => setShowNavigationConfirmation(false)}
       />
+
+      {/* Accessibility Settings Modal */}
+      <AccessibilitySettings
+        isOpen={showAccessibilitySettings}
+        onClose={() => setShowAccessibilitySettings(false)}
+      />
       </EditorErrorBoundary>
     </div>
+  );
+});
+
+EditorPageContent.displayName = 'EditorPageContent';
+
+// Main EditorPage component with EditorModeProvider
+export const EditorPage = memo(() => {
+  const { id } = useParams<{ id: string }>();
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+
+
+  // Listen for suggestions updates from child component
+  useEffect(() => {
+    const handleSuggestionsUpdate = (event: CustomEvent) => {
+      const { suggestions: newSuggestions } = event.detail;
+      setSuggestions(newSuggestions);
+    };
+
+    window.addEventListener('suggestionsUpdated', handleSuggestionsUpdate as EventListener);
+    return () => {
+      window.removeEventListener('suggestionsUpdated', handleSuggestionsUpdate as EventListener);
+    };
+  }, []);
+
+  // Handle suggestion recalculation callback
+  const handleSuggestionRecalculation = useCallback(async (_content: string, _currentSuggestions: Suggestion[]) => {
+
+    // If this is a new post, no suggestions to recalculate
+    if (!id || id === 'new') {
+      return [];
+    }
+
+    try {
+      // Start a new review to get updated suggestions based on content changes
+      await apiService.startReview(id);
+
+      console.log('Started suggestion recalculation for post:', id);
+
+      // Return the current suggestions - they will be updated via the suggestions manager
+      return suggestions;
+    } catch (error) {
+      console.error('Failed to start suggestion recalculation:', error);
+      // Return current suggestions on error
+      return suggestions;
+    }
+  }, [id, suggestions]);
+
+  return (
+    <EditorModeProvider
+      onSuggestionRecalculation={handleSuggestionRecalculation}
+      currentSuggestions={suggestions}
+      postId={id && id !== 'new' ? id : undefined}
+    >
+      <EditorPageContent />
+    </EditorModeProvider>
   );
 });
 

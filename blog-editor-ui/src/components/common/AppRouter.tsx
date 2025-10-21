@@ -103,14 +103,7 @@ export const AppRouter = () => {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/editor/new"
-          element={
-            <ProtectedRoute>
-              <EditorPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Use dynamic route for both existing and new posts (id='new') */}
         <Route
           path="/editor/:id"
           element={

@@ -1,2 +1,12 @@
 export { initializeApiService, apiService } from './ApiService';
-export type { ApiServiceConfig } from '../types';
+export {
+  ModeTransitionManager,
+  createModeTransitionManager,
+  modeTransitionManager
+} from './ModeTransitionManager';
+export type {
+  ApiServiceConfig,
+  TransitionProgress,
+  TransitionResult,
+  TransitionConfig
+} from '../types';

@@ -36,10 +36,10 @@ interface ProfileProviderProps {
 }
 
 export const ProfileProvider = ({ children }: ProfileProviderProps) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingProfile, setIsCheckingProfile] = useState(false);
+  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
   const [error, setError] = useState<ApiError | Error | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [lastOperation, setLastOperation] = useState<'create' | 'update' | 'load' | null>(null);
@@ -52,15 +52,26 @@ export const ProfileProvider = ({ children }: ProfileProviderProps) => {
   const canRetry = error ? isRetryableError(error) && retryCount < 3 : false;
   const maxRetries = 3;
 
-  // Load profile when user authenticates (simplified approach)
+  // Load/clear profile based on auth state, but avoid clearing while auth is loading
   useEffect(() => {
+    if (isAuthLoading) {
+      return; // Don't perform cleanup while auth state is being determined
+    }
+
     if (isAuthenticated && user) {
       loadProfileSimple();
     } else {
-      clearProfile();
+      // Only clear profile data, avoid aggressive localStorage cleanup here
+      setProfile(null);
+      setError(null);
+      setRetryCount(0);
+      setLastOperation(null);
+      setLastOperationData(null);
+      setIsCheckingProfile(false);
+      // Do not call LocalStorageManager.performCompleteCleanup() here to avoid removing auth tokens
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, user]); // Only depend on auth state, not the functions
+  }, [isAuthLoading, isAuthenticated, user]); // Only depend on auth state, not the functions
 
   // Simplified profile loading without complex migration logic
   const loadProfileSimple = useCallback(async () => {

@@ -264,6 +264,7 @@ export const SuggestionsPanel = memo(({
       role="region"
       aria-label="Writing improvements"
       aria-describedby="suggestions-instructions"
+      data-testid="suggestions-panel"
     >
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium text-gray-900">

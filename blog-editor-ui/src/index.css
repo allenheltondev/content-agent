@@ -1,3 +1,6 @@
+/* Import high contrast mode styles (must be first) */
+@import './styles/high-contrast.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

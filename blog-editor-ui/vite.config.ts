@@ -27,7 +27,7 @@ export default defineConfig({
           'editor': [
             './src/components/editor/ContentEditorWithSuggestions.tsx',
             './src/components/editor/SuggestionsPanel.tsx',
-            './src/components/editor/SuggestionHighlightOverlay.tsx'
+            // Removed legacy SuggestionHighlightOverlay
           ],
 
           // Dashboard chunks

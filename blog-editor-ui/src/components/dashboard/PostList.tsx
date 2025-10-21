@@ -156,6 +156,7 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
         </div>
         <div className="flex-shrink-0">
           <button
+            type="button"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -189,6 +190,7 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
                 Your content library is empty, but that's about to change. Start your first post and let AI help you craft something amazing.
               </p>
               <button
+                type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -214,6 +216,7 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
               role="listitem"
             >
               <button
+                type="button"
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();

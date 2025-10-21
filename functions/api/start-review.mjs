@@ -32,7 +32,7 @@ export const handler = async (event) => {
     }
 
     const post = unmarshall(getResponse.Item);
-    const topicName = `${tenantId}#${postId}`;
+    const topicName = `${tenantId}_${postId}`;
     let momentoToken;
 
     try {

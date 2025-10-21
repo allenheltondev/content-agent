@@ -207,21 +207,39 @@ export const InteractiveSuggestionHighlights = ({
       );
     });
   }, [suggestions]);
-  
+
   // Process suggestions into interactive highlights
   const interactiveHighlights = useMemo(() => {
     if (!suggestions.length || !content) {
       return [];
     }
 
-    // Filter valid suggestions
+    // Filter valid suggestions with detailed validation
     const validSuggestions = suggestions.filter(suggestion => {
-      const { startOffset, endOffset } = suggestion;
-      return (
-        startOffset >= 0 &&
-        endOffset <= content.length &&
-        startOffset < endOffset
-      );
+      const { startOffset, endOffset, textToReplace } = suggestion;
+
+      // Basic bounds check
+      if (startOffset < 0 || endOffset > content.length || startOffset >= endOffset) {
+        console.warn(`Invalid suggestion bounds for ${suggestion.id}:`, {
+          startOffset,
+          endOffset,
+          contentLength: content.length
+        });
+        return false;
+      }
+
+      // Text match validation
+      const actualText = content.substring(startOffset, endOffset);
+      if (actualText !== textToReplace) {
+        console.warn(`Text mismatch for suggestion ${suggestion.id}:`, {
+          expected: textToReplace,
+          actual: actualText,
+          position: { startOffset, endOffset }
+        });
+        // Still include it but log the mismatch for debugging
+      }
+
+      return true;
     });
 
     // Create interactive highlights
@@ -347,7 +365,7 @@ export const InteractiveSuggestionHighlights = ({
     return overlapping.length > 1;
   }, [getOverlappingSuggestions]);
 
-  // Create text segments for rendering
+  // Create text segments for rendering with improved offset handling
   const textSegments = useMemo(() => {
     if (!interactiveHighlights.length) {
       return [{
@@ -368,49 +386,84 @@ export const InteractiveSuggestionHighlights = ({
 
     let currentOffset = 0;
 
-    // Sort highlights by start offset for rendering
-    const sortedHighlights = [...interactiveHighlights].sort((a, b) =>
-      a.startOffset - b.startOffset
-    );
+    // Sort highlights by start offset for rendering and handle overlaps
+    const sortedHighlights = [...interactiveHighlights]
+      .sort((a, b) => a.startOffset - b.startOffset)
+      .filter((highlight, index, array) => {
+        // Validate highlight bounds
+        if (highlight.startOffset < 0 ||
+            highlight.endOffset > content.length ||
+            highlight.startOffset >= highlight.endOffset) {
+          console.warn(`Invalid highlight bounds for suggestion ${highlight.suggestionId}:`, {
+            startOffset: highlight.startOffset,
+            endOffset: highlight.endOffset,
+            contentLength: content.length
+          });
+          return false;
+        }
+
+        // Remove highlights that are completely contained within previous highlights
+        for (let i = 0; i < index; i++) {
+          const prev = array[i];
+          if (highlight.startOffset >= prev.startOffset && highlight.endOffset <= prev.endOffset) {
+            console.warn(`Removing nested highlight for suggestion ${highlight.suggestionId}`);
+            return false;
+          }
+        }
+
+        return true;
+      });
 
     for (const highlight of sortedHighlights) {
       const { startOffset, endOffset } = highlight;
 
-      // Add text before the highlight
-      if (startOffset > currentOffset) {
-        const textBefore = content.substring(currentOffset, startOffset);
+      // Ensure we don't go backwards
+      const adjustedStartOffset = Math.max(startOffset, currentOffset);
+
+      // Add text before the highlight if there's a gap
+      if (adjustedStartOffset > currentOffset) {
+        const textBefore = content.substring(currentOffset, adjustedStartOffset);
         if (textBefore) {
           segments.push({
             text: textBefore,
             type: 'text',
             startOffset: currentOffset,
-            endOffset: startOffset
+            endOffset: adjustedStartOffset
           });
         }
       }
 
-      // Add the highlight
-      const highlightText = content.substring(startOffset, endOffset);
-      segments.push({
-        text: highlightText,
-        type: 'highlight',
-        highlight,
-        startOffset,
-        endOffset
-      });
-
-      currentOffset = endOffset;
+      // Add the highlight (only if there's text to highlight)
+      if (endOffset > adjustedStartOffset) {
+        const highlightText = content.substring(adjustedStartOffset, endOffset);
+        if (highlightText) {
+          segments.push({
+            text: highlightText,
+            type: 'highlight',
+            highlight: {
+              ...highlight,
+              startOffset: adjustedStartOffset,
+              endOffset: endOffset
+            },
+            startOffset: adjustedStartOffset,
+            endOffset: endOffset
+          });
+        }
+        currentOffset = endOffset;
+      }
     }
 
     // Add remaining text after the last highlight
     if (currentOffset < content.length) {
       const remainingText = content.substring(currentOffset);
-      segments.push({
-        text: remainingText,
-        type: 'text',
-        startOffset: currentOffset,
-        endOffset: content.length
-      });
+      if (remainingText) {
+        segments.push({
+          text: remainingText,
+          type: 'text',
+          startOffset: currentOffset,
+          endOffset: content.length
+        });
+      }
     }
 
     return segments;

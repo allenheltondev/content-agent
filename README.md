@@ -85,9 +85,582 @@ The suggestion engine (`createSuggestions`) is critical to providing that magica
 
 Web search integration (`googleSearch`) gives the Fact checker real research capabilities. Using SerpAPI, it can search Google, extract content from authoritative sources, and cross-reference claims against multiple sources.
 
-## Architecture Diagram
+## Architecture Overview
 
-This is a decently large app, and as a result, has quite a lot of moving parts to diagram.
+This is a decently large app, and as a result, has quite a lot of moving parts to diagram. Below you'll find different architectural views to help you understand the system at various levels of detail.
+
+### How to Navigate These Diagrams
+
+Each diagram serves a specific purpose and audience:
+
+- **Start with High-Level System Architecture** if you're new to the system and want to understand the major components
+- **Dive into AI Agents & Nova Models** if you're interested in the AI capabilities and agent specialization
+- **Explore API Layer & Authentication** if you're working on API endpoints or understanding the security model
+- **Review Event-Driven Workflow** if you need to understand async processing and workflow orchestration
+- **Check Data Storage Architecture** if you're working with data models or storage patterns
+- **Reference Complete System Diagram** when you need to see all connections and detailed interactions
+
+The diagrams are designed to build upon each other, moving from high-level concepts to detailed implementation patterns.
+
+### AI Agents & Nova Models
+
+**Focus:** Specialized AI agents, Nova model assignments, and Bedrock AgentCore memory system
+**Use Case:** Understanding the AI architecture, agent specialization, and memory persistence patterns
+**Related Sections:**
+- See [High-Level System Architecture](#high-level-system-architecture) for overall system context
+- See [Event-Driven Workflow](#event-driven-workflow) for how agents are orchestrated
+- See [Data Storage Architecture](#data-storage-architecture) for where agent results are stored
+- See [API Layer & Authentication](#api-layer--authentication) for how reviews are triggered
+
+```mermaid
+graph TB
+    %% Agent Orchestration Entry Point
+    subgraph "Agent Orchestration"
+        STEPFUNC[Step Functions<br/>Parallel Agent Execution]
+    end
+
+    %% AI Agents with Nova Models
+    subgraph "🤖 Specialized AI Agents"
+        LLMAUDIT[LLM Auditor<br/>🔥 Amazon Nova Pro v1:0<br/>Detects AI-generated patterns]
+        BRANDAUDIT[Brand Auditor<br/>🔥 Amazon Nova Lite v1:0<br/>Voice consistency analysis]
+        FACTCHECK[Fact Checker<br/>🔥 Amazon Nova Pro v1:0<br/>Web research & verification]
+        READABILITY[Readability Agent<br/>🔥 Amazon Nova Lite v1:0<br/>Grammar & clarity analysis]
+        SUMMARIZER[Summary Agent<br/>🔥 Amazon Nova Pro v1:0<br/>Audit result synthesis]
+    end
+
+    %% Bedrock AgentCore Memory System
+    subgraph "🧠 Bedrock AgentCore Memory"
+        AGENTCORE[Bedrock AgentCore<br/>Conversation Memory Manager]
+        MEMORY[Memory Store<br/>Session & Actor Context]
+
+        subgraph "Memory Strategies"
+            USERPREF[User Preference Strategy<br/>authorWritingToneAndStyle]
+            SEMANTIC[Semantic Strategy<br/>authorWritingTopics]
+        end
+
+        MEMBOOTSTRAP[Memory Bootstrap<br/>CloudFormation Custom Resource]
+    end
+
+    %% Agent Tools
+    subgraph "Agent Tools"
+        SAVEAUDIT[Save LLM Audit<br/>Audit persistence]
+        SAVEBRAND[Save Brand Audit<br/>Brand analysis storage]
+        CREATESUGG[Create Suggestions<br/>Actionable recommendations]
+        WEBSEARCH[Web Search<br/>SerpAPI integration]
+    end
+
+    %% Data Storage for Agent Results
+    subgraph "Agent Data Storage"
+        DYNAMODB[(DynamoDB<br/>Audits & Suggestions)]
+        SSM[SSM Parameter Store<br/>Memory ID Configuration]
+    end
+
+    %% External Services
+    subgraph "External Integrations"
+        SERPAPI[SerpAPI<br/>Google Search Results]
+    end
+
+    %% Orchestration Flow
+    STEPFUNC --> LLMAUDIT
+    STEPFUNC --> BRANDAUDIT
+    STEPFUNC --> FACTCHECK
+    STEPFUNC --> READABILITY
+    STEPFUNC --> SUMMARIZER
+
+    %% Agent Tool Relationships
+    LLMAUDIT --> SAVEAUDIT
+    LLMAUDIT --> CREATESUGG
+    BRANDAUDIT --> SAVEBRAND
+    BRANDAUDIT --> CREATESUGG
+    FACTCHECK --> WEBSEARCH
+    FACTCHECK --> CREATESUGG
+    READABILITY --> CREATESUGG
+    SUMMARIZER --> DYNAMODB
+
+    %% Bedrock AgentCore Integration
+    LLMAUDIT -.-> AGENTCORE
+    BRANDAUDIT -.-> AGENTCORE
+    FACTCHECK -.-> AGENTCORE
+    READABILITY -.-> AGENTCORE
+    SUMMARIZER -.-> AGENTCORE
+
+    %% Memory System Connections
+    AGENTCORE --> MEMORY
+    MEMORY --> USERPREF
+    MEMORY --> SEMANTIC
+    MEMBOOTSTRAP --> AGENTCORE
+    MEMBOOTSTRAP --> SSM
+
+    %% Tool Data Storage
+    SAVEAUDIT --> DYNAMODB
+    SAVEBRAND --> DYNAMODB
+    CREATESUGG --> DYNAMODB
+
+    %% External Integration
+    WEBSEARCH --> SERPAPI
+
+    %% Memory Configuration
+    LLMAUDIT --> SSM
+    BRANDAUDIT --> SSM
+    FACTCHECK --> SSM
+    READABILITY --> SSM
+    SUMMARIZER --> SSM
+
+    %% Styling
+    classDef novaModel fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    classDef agentCore fill:#fff3e0,stroke:#f57c00,stroke-width:3px
+    classDef tools fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef orchestration fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef storage fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef external fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+
+    class LLMAUDIT,BRANDAUDIT,FACTCHECK,READABILITY,SUMMARIZER novaModel
+    class AGENTCORE,MEMORY,USERPREF,SEMANTIC,MEMBOOTSTRAP agentCore
+    class SAVEAUDIT,SAVEBRAND,CREATESUGG,WEBSEARCH tools
+    class STEPFUNC orchestration
+    class DYNAMODB,SSM storage
+    class SERPAPI external
+```
+
+**Key Components:**
+- **LLM Auditor (Nova Pro)**: Detects AI-generated content patterns, clichés, and template scaffolding with sophisticated reasoning
+- **Brand Auditor (Nova Lite)**: Analyzes voice consistency against learned writing patterns and provided brand guidelines
+- **Fact Checker (Nova Pro)**: Verifies claims through web research using complex multi-source analysis
+- **Readability Agent (Nova Lite)**: Improves grammar and clarity using established readability metrics
+- **Summary Agent (Nova Pro)**: Synthesizes all audit results into actionable 3-sentence summaries
+- **Bedrock AgentCore**: Provides persistent memory across sessions with user preference and semantic strategies
+- **Agent Tools**: Specialized functions for audit storage, suggestion creation, and web search integration
+
+**Notable Patterns:**
+- **Nova Model Selection**: Pro models handle complex reasoning (AI detection, fact-checking, synthesis), Lite models handle focused analysis (brand voice, readability)
+- **Memory Persistence**: AgentCore maintains conversation history and learns writing patterns over time through two memory strategies
+- **Tool Specialization**: Each agent has access to specific tools aligned with their analysis domain
+- **Parallel Execution**: All agents run simultaneously through Step Functions orchestration for faster results
+- **Multi-tenant Memory**: Memory namespaces isolate learning between different users while maintaining shared agent capabilities
+
+**What's Not Shown Here:**
+This diagram focuses on the AI layer and intentionally omits the API triggers, frontend interactions, and detailed data storage patterns. For the complete request flow, see the [Event-Driven Workflow](#event-driven-workflow) and [Complete System Diagram](#complete-system-diagram-reference).
+
+### API Layer & Authentication
+
+**Focus:** API Gateway, Lambda functions, JWT validation, and Cognito integration
+**Use Case:** Understanding request lifecycle, security model, and CRUD operations for developers working on API endpoints
+**Related Sections:**
+- See [High-Level System Architecture](#high-level-system-architecture) for how this fits into the overall system
+- See [Event-Driven Workflow](#event-driven-workflow) for async processing triggered by API calls
+- See [Data Storage Architecture](#data-storage-architecture) for how API functions interact with storage
+- See [AI Agents & Nova Models](#ai-agents--nova-models) for what happens during content analysis
+
+```mermaid
+graph TB
+    %% Client Layer
+    subgraph "Client Layer"
+        CLIENT[React Blog Editor<br/>Frontend Application]
+    end
+
+    %% API Gateway Layer
+    subgraph "🔐 API Gateway & Security"
+        APIGW[API Gateway<br/>REST API Endpoints]
+        AUTHORIZER[Lambda Authorizer<br/>JWT Token Validation]
+    end
+
+    %% Authentication Services
+    subgraph "🔑 Amazon Cognito Authentication"
+        COGNITO[Cognito User Pool<br/>User Management & JWT]
+        POSTCNF[Post Confirmation Trigger<br/>Generate Tenant ID]
+        PRETOKEN[Pre Token Generation<br/>Inject Custom Claims]
+    end
+
+    %% Core API Functions
+    subgraph "📝 Content Management API"
+        LISTPOSTS[List Posts<br/>GET /posts]
+        GETPOST["Get Post<br/>GET /posts/{id}"]
+        CREATEPOST[Create Post<br/>POST /posts]
+        UPDATEPOST["Update Post<br/>PUT /posts/{id}"]
+        DELETEPOST["Delete Post<br/>DELETE /posts/{id}"]
+    end
+
+    subgraph "💡 Suggestions API"
+        GETSUGG["Get Suggestions<br/>GET /posts/{id}/suggestions"]
+        UPDATESUGG["Update Suggestion Status<br/>POST /posts/{id}/suggestions/{id}/statuses"]
+        STARTREVIEW["Start Review<br/>POST /posts/{id}/reviews"]
+    end
+
+    subgraph "👤 Profile Management API"
+        GETPROFILE[Get Profile<br/>GET /profile]
+        CREATEPROFILE[Create Profile<br/>POST /profile]
+        UPDATEPROFILE[Update Profile<br/>PUT /profile]
+        GETSTATS[Get Stats<br/>GET /stats]
+    end
+
+    %% Data Storage
+    subgraph "💾 Data Storage"
+        DYNAMODB[(DynamoDB<br/>Multi-tenant Data)]
+        S3[(S3 Bucket<br/>Content Storage)]
+    end
+
+    %% Request Flow
+    CLIENT --> APIGW
+    APIGW --> AUTHORIZER
+    AUTHORIZER --> COGNITO
+
+    %% Authentication Flow
+    CLIENT -.-> COGNITO
+    COGNITO --> POSTCNF
+    COGNITO --> PRETOKEN
+
+    %% API Routes - Content Management
+    APIGW --> LISTPOSTS
+    APIGW --> GETPOST
+    APIGW --> CREATEPOST
+    APIGW --> UPDATEPOST
+    APIGW --> DELETEPOST
+
+    %% API Routes - Suggestions
+    APIGW --> GETSUGG
+    APIGW --> UPDATESUGG
+    APIGW --> STARTREVIEW
+
+    %% API Routes - Profile
+    APIGW --> GETPROFILE
+    APIGW --> CREATEPROFILE
+    APIGW --> UPDATEPROFILE
+    APIGW --> GETSTATS
+
+    %% Data Access
+    LISTPOSTS --> DYNAMODB
+    GETPOST --> DYNAMODB
+    CREATEPOST --> DYNAMODB
+    UPDATEPOST --> DYNAMODB
+    DELETEPOST --> DYNAMODB
+    GETSUGG --> DYNAMODB
+    UPDATESUGG --> DYNAMODB
+    GETPROFILE --> DYNAMODB
+    CREATEPROFILE --> DYNAMODB
+    UPDATEPROFILE --> DYNAMODB
+    GETSTATS --> DYNAMODB
+
+    %% Content Storage
+    CREATEPOST --> S3
+    UPDATEPOST --> S3
+
+    %% JWT Token Flow (dotted lines for token passing)
+    AUTHORIZER -.-> LISTPOSTS
+    AUTHORIZER -.-> GETPOST
+    AUTHORIZER -.-> CREATEPOST
+    AUTHORIZER -.-> UPDATEPOST
+    AUTHORIZER -.-> DELETEPOST
+    AUTHORIZER -.-> GETSUGG
+    AUTHORIZER -.-> UPDATESUGG
+    AUTHORIZER -.-> STARTREVIEW
+    AUTHORIZER -.-> GETPROFILE
+    AUTHORIZER -.-> CREATEPROFILE
+    AUTHORIZER -.-> UPDATEPROFILE
+    AUTHORIZER -.-> GETSTATS
+
+    %% Styling
+    classDef apiGateway fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    classDef cognito fill:#fff3e0,stroke:#f57c00,stroke-width:3px
+    classDef contentApi fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef suggestionsApi fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef profileApi fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef storage fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+    classDef client fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+
+    class APIGW,AUTHORIZER apiGateway
+    class COGNITO,POSTCNF,PRETOKEN cognito
+    class LISTPOSTS,GETPOST,CREATEPOST,UPDATEPOST,DELETEPOST contentApi
+    class GETSUGG,UPDATESUGG,STARTREVIEW suggestionsApi
+    class GETPROFILE,CREATEPROFILE,UPDATEPROFILE,GETSTATS profileApi
+    class DYNAMODB,S3 storage
+    class CLIENT client
+```
+
+**Key Components:**
+- **API Gateway**: Single entry point for all REST API requests with built-in CORS and throttling
+- **Lambda Authorizer**: Validates JWT tokens and extracts tenant context for multi-tenant security
+- **Cognito User Pool**: Manages user registration, authentication, and JWT token generation
+- **Post Confirmation Trigger**: Automatically generates unique tenant ID for new users
+- **Pre Token Generation**: Injects tenant ID as custom claim into JWT tokens
+- **Content Management API**: Full CRUD operations for blog posts with tenant isolation
+- **Suggestions API**: Manages AI-generated suggestions and review workflow triggers
+- **Profile Management API**: User profile and statistics with personalized insights
+
+**Notable Patterns:**
+- **JWT-based Security**: All API requests require valid JWT tokens with tenant context
+- **Multi-tenant Isolation**: Tenant ID extracted from JWT ensures data segregation
+- **RESTful Design**: Clean REST endpoints following standard HTTP methods and status codes
+- **Async Processing**: Review triggers initiate background workflows without blocking API responses
+- **Composite Keys**: DynamoDB uses tenant-scoped keys for efficient querying and isolation
+- **Cognito Triggers**: Automated tenant provisioning and token customization for seamless onboarding
+
+**What's Not Shown Here:**
+This diagram focuses on the API and authentication layer. It doesn't show the AI agents, Step Functions workflows, or detailed data schemas. For those details, see [AI Agents & Nova Models](#ai-agents--nova-models) and [Event-Driven Workflow](#event-driven-workflow).
+
+### Event-Driven Workflow
+
+**Focus:** EventBridge, Step Functions, and agent orchestration for async content analysis
+**Use Case:** Understanding workflow coordination, parallel processing, and notification patterns for developers working on async processing
+**Related Sections:**
+- See [AI Agents & Nova Models](#ai-agents--nova-models) for details about what each agent does during execution
+- See [API Layer & Authentication](#api-layer--authentication) for how workflows are triggered
+- See [Data Storage Architecture](#data-storage-architecture) for where workflow results are stored
+- See [High-Level System Architecture](#high-level-system-architecture) for overall system context
+
+```mermaid
+graph TB
+    %% API Trigger Layer
+    subgraph "🚀 Review Initiation"
+        STARTREVIEW[Start Review API<br/>POST /posts/{id}/reviews]
+        VALIDATE[Content Validation<br/>Check post exists & status]
+    end
+
+    %% EventBridge Layer
+    subgraph "📡 Event Orchestration"
+        EVENTBRIDGE[Amazon EventBridge<br/>Default Event Bus]
+        STARTEVENT[Start Content Analysis<br/>Event Publication]
+        COMPLETEEVENT[Content Analysis Completed<br/>Event Publication]
+    end
+
+    %% Step Functions Workflow
+    subgraph "⚙️ Step Functions Workflow"
+        STEPFUNC[Analyze Content<br/>State Machine]
+        IDEMPOTENCY[Save Idempotency Key<br/>DynamoDB Conditional Write]
+        PARALLEL[Parallel Agent Execution<br/>4 Concurrent Branches]
+        SUMMARIZE[Summarize Results<br/>Sequential Processing]
+        SETSTATUS[Update Analysis Status<br/>Success/Failed State]
+    end
+
+    %% Agent Execution Layer
+    subgraph "🤖 Parallel Agent Processing"
+        LLMAGENT[LLM Audit Agent<br/>Nova Pro Analysis]
+        BRANDAGENT[Brand Audit Agent<br/>Nova Lite Analysis]
+        FACTAGENT[Fact Check Agent<br/>Nova Pro + Web Search]
+        READAGENT[Readability Agent<br/>Nova Lite Analysis]
+    end
+
+    %% Post-Processing Layer
+    subgraph "📋 Post-Processing Pipeline"
+        POSTPROCESS[Post Processing Function<br/>EventBridge Triggered]
+        SUGGVALIDATION[Suggestion Validation<br/>Content Change Detection]
+        STATUSUPDATE[Status Management<br/>Published Content Handling]
+    end
+
+    %% Notification Layer
+    subgraph "🔔 Real-time Notifications"
+        MOMENTO[Momento Topics<br/>WebSocket Alternative]
+        APIDEST[EventBridge API Destination<br/>HTTP Integration]
+        FRONTEND[Frontend Subscription<br/>Real-time Updates]
+    end
+
+    %% Data Storage
+    subgraph "💾 Workflow Data Storage"
+        WORKFLOWDB[(DynamoDB<br/>Analysis Status & Results)]
+        MOMENTOTOKEN[Momento Auth Token<br/>Disposable Subscription]
+    end
+
+    %% External Integration
+    subgraph "🌐 External Services"
+        SERPAPI[SerpAPI<br/>Fact-checking Web Search]
+    end
+
+    %% Main Workflow Flow
+    STARTREVIEW --> VALIDATE
+    VALIDATE --> STARTEVENT
+    STARTEVENT --> EVENTBRIDGE
+    EVENTBRIDGE --> STEPFUNC
+
+    %% Step Functions Internal Flow
+    STEPFUNC --> IDEMPOTENCY
+    IDEMPOTENCY --> PARALLEL
+    PARALLEL --> LLMAGENT
+    PARALLEL --> BRANDAGENT
+    PARALLEL --> FACTAGENT
+    PARALLEL --> READAGENT
+    PARALLEL --> SUMMARIZE
+    SUMMARIZE --> SETSTATUS
+    SETSTATUS --> COMPLETEEVENT
+
+    %% Event Completion Flow
+    COMPLETEEVENT --> EVENTBRIDGE
+    EVENTBRIDGE --> POSTPROCESS
+    EVENTBRIDGE --> APIDEST
+
+    %% Post-Processing Flow
+    POSTPROCESS --> SUGGVALIDATION
+    POSTPROCESS --> STATUSUPDATE
+
+    %% Notification Flow
+    APIDEST --> MOMENTO
+    MOMENTO --> FRONTEND
+    STARTREVIEW --> MOMENTOTOKEN
+
+    %% Data Storage Connections
+    IDEMPOTENCY --> WORKFLOWDB
+    SETSTATUS --> WORKFLOWDB
+    SUGGVALIDATION --> WORKFLOWDB
+    STATUSUPDATE --> WORKFLOWDB
+
+    %% External Integration
+    FACTAGENT --> SERPAPI
+
+    %% Error Handling (dotted lines)
+    STEPFUNC -.-> SETSTATUS
+    PARALLEL -.-> SETSTATUS
+
+    %% Token Flow (dotted lines)
+    STARTREVIEW -.-> MOMENTOTOKEN
+    MOMENTOTOKEN -.-> FRONTEND
+
+    %% Styling
+    classDef trigger fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+    classDef eventBridge fill:#fff3e0,stroke:#f57c00,stroke-width:3px
+    classDef stepFunctions fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    classDef agents fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef postProcess fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef notifications fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+    classDef storage fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef external fill:#fff8e1,stroke:#f9a825,stroke-width:2px
+
+    class STARTREVIEW,VALIDATE trigger
+    class EVENTBRIDGE,STARTEVENT,COMPLETEEVENT eventBridge
+    class STEPFUNC,IDEMPOTENCY,PARALLEL,SUMMARIZE,SETSTATUS stepFunctions
+    class LLMAGENT,BRANDAGENT,FACTAGENT,READAGENT agents
+    class POSTPROCESS,SUGGVALIDATION,STATUSUPDATE postProcess
+    class MOMENTO,APIDEST,FRONTEND,MOMENTOTOKEN notifications
+    class WORKFLOWDB storage
+    class SERPAPI external
+```
+
+**Key Components:**
+- **Start Review API**: Validates content readiness and publishes EventBridge event to trigger analysis workflow
+- **EventBridge Orchestration**: Routes events between API triggers, Step Functions, and notification systems
+- **Step Functions State Machine**: Manages parallel agent execution with idempotency, error handling, and status tracking
+- **Parallel Agent Processing**: Four specialized agents run simultaneously for faster analysis completion
+- **Post-Processing Pipeline**: Validates suggestions against content changes and handles published content status
+- **Momento Topics Integration**: Provides real-time notifications to frontend via EventBridge API Destinations
+- **Idempotency Management**: Prevents duplicate analysis runs using DynamoDB conditional writes with TTL
+
+**Notable Patterns:**
+- **Event-Driven Architecture**: API functions trigger async workflows without blocking user interactions
+- **Parallel Processing**: All agents execute simultaneously through Step Functions parallel branches for optimal performance
+- **Idempotency Protection**: Workflow prevents duplicate executions using composite keys and conditional DynamoDB writes
+- **Real-time Notifications**: EventBridge API Destinations push completion events to Momento Topics for instant frontend updates
+- **Error Resilience**: Step Functions includes retry logic and error handling with automatic status updates
+- **Async Post-Processing**: Content changes trigger suggestion validation and status management independently
+- **Disposable Authentication**: Momento tokens provide secure, time-limited access for real-time subscriptions
+
+**What's Not Shown Here:**
+This diagram focuses on workflow orchestration and event flow. It doesn't show the detailed agent implementations, API endpoint specifics, or data storage schemas. For agent internals, see [AI Agents & Nova Models](#ai-agents--nova-models). For data patterns, see [Data Storage Architecture](#data-storage-architecture).
+
+### High-Level System Architecture
+
+**Focus:** Major architectural layers and data flow between core system components
+**Use Case:** Getting oriented with the overall system design and understanding how the major pieces fit together
+**Related Sections:**
+- See [AI Agents & Nova Models](#ai-agents--nova-models) for detailed agent architecture
+- See [API Layer & Authentication](#api-layer--authentication) for request lifecycle details
+- See [Event-Driven Workflow](#event-driven-workflow) for async processing patterns
+- See [Complete System Diagram](#complete-system-diagram-reference) for comprehensive view
+
+```mermaid
+graph TB
+    %% Frontend Layer
+    subgraph "Frontend Layer"
+        UI[React Blog Editor<br/>TypeScript + Tailwind]
+        AUTH[Cognito Authentication<br/>JWT + User Management]
+    end
+
+    %% API Layer
+    subgraph "API Gateway Layer"
+        APIGW[API Gateway<br/>REST Endpoints]
+        LAMBDA[Core Lambda Functions<br/>CRUD + Review Operations]
+    end
+
+    %% AI Processing Layer
+    subgraph "AI Agent Layer"
+        AGENTS[5 Specialized Agents<br/>Amazon Nova Models]
+        MEMORY[Bedrock AgentCore<br/>Persistent Memory]
+    end
+
+    %% Orchestration Layer
+    subgraph "Event-Driven Workflow"
+        EVENTS[EventBridge + Step Functions<br/>Async Processing Pipeline]
+    end
+
+    %% Data Layer
+    subgraph "Data Storage Layer"
+        STORAGE[DynamoDB + S3<br/>Content & Suggestions]
+    end
+
+    %% External Services
+    subgraph "External Integrations"
+        EXTERNAL[Web Search + Notifications<br/>SerpAPI + Momento]
+    end
+
+    %% Connections showing main data flow
+    UI --> APIGW
+    AUTH --> UI
+    APIGW --> LAMBDA
+    LAMBDA --> EVENTS
+    EVENTS --> AGENTS
+    AGENTS --> MEMORY
+    AGENTS --> EXTERNAL
+    LAMBDA --> STORAGE
+    AGENTS --> STORAGE
+
+    %% Styling
+    classDef frontend fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef api fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef ai fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef workflow fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef data fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef external fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+
+    class UI,AUTH frontend
+    class APIGW,LAMBDA api
+    class AGENTS,MEMORY ai
+    class EVENTS workflow
+    class STORAGE data
+    class EXTERNAL external
+```
+
+**Key Components:**
+- **Frontend Layer**: React-based blog editor with Cognito authentication providing a clean writing interface
+- **API Gateway Layer**: REST API with Lambda functions handling all CRUD operations and review triggers
+- **AI Agent Layer**: Five specialized Nova-powered agents with persistent memory for personalized content analysis
+- **Event-Driven Workflow**: EventBridge and Step Functions orchestrating parallel agent execution
+- **Data Storage Layer**: DynamoDB for structured data and S3 for content storage with multi-tenant isolation
+- **External Integrations**: Web search for fact-checking and real-time notifications for user feedback
+
+**Notable Patterns:**
+- **Event-driven architecture**: API functions trigger async workflows without blocking user interactions
+- **Multi-agent specialization**: Each agent focuses on a specific aspect (AI detection, brand voice, facts, grammar, summary)
+- **Persistent memory**: Agents learn and improve their analysis based on user feedback over time
+- **Parallel processing**: All agents run simultaneously for faster analysis results
+
+**What's Not Shown Here:**
+This high-level view intentionally omits implementation details like specific Lambda functions, agent tools, memory strategies, and detailed data flows. For those details, see the focused diagrams below.
+
+### Data Storage Architecture
+
+**Focus:** DynamoDB, S3, and data access patterns with multi-tenant isolation
+**Use Case:** Understanding storage design, data models, and access patterns for developers working on data layer
+**Related Sections:**
+- See [API Layer & Authentication](#api-layer--authentication) for how data is accessed through APIs
+- See [AI Agents & Nova Models](#ai-agents--nova-models) for how agents store their analysis results
+- See [Event-Driven Workflow](#event-driven-workflow) for workflow data management
+- See [High-Level System Architecture](#high-level-system-architecture) for overall data flow context
+
+*Note: This diagram is planned for implementation in task 5 of the architecture breakdown spec.*
+
+### Complete System Diagram (Reference)
+
+**Focus:** Complete system view with all components and connections
+**Use Case:** Reference diagram for developers who need to see the full system complexity and all interactions
+**Related Sections:** This diagram combines all the focused views above - use the individual diagrams for specific architectural concerns
+
+For developers who need to see all the detailed connections and components, here's the comprehensive architecture diagram:
 
 ```mermaid
 graph TB
@@ -273,9 +846,49 @@ graph TB
     class AGENTCORE,MEMORY agentCore
 ```
 
-When you submit content for review, EventBridge triggers the Step Functions workflow, which launches all five Nova-powered agents in parallel. Each agent maintains its own AgentCore memory context while using specialized tools to analyze your content and create actionable suggestions.
+**Key Components:**
+- **Complete Integration View**: Shows all components from the focused diagrams in their full context
+- **Detailed Connections**: Every arrow represents actual data flow or service integration
+- **Multi-tenant Security**: Tenant isolation patterns visible throughout the data flow
+- **Performance Optimizations**: Connection reuse, parallel processing, and caching strategies
 
-The event-driven design ensures that everything scales naturally - from a single user reviewing their blog post to hundreds of content creators using the platform simultaneously. The multi-tenant security model keeps everyone's data isolated, while the performance optimizations ensure that your digital copyedit team delivers feedback fast enough to keep you in your creative flow.
+**Notable Patterns:**
+- **End-to-End Flow**: Complete request lifecycle from frontend to AI analysis to notification
+- **Service Integration**: How AWS services work together in the serverless architecture
+- **Data Consistency**: How different components maintain data integrity across async operations
+- **Scalability Design**: Architecture patterns that support growth from single user to enterprise scale
+
+**When to Use This Diagram:**
+- When you need to understand the complete system interactions
+- For troubleshooting issues that span multiple components
+- When planning changes that affect multiple architectural layers
+- For onboarding senior developers who need the full technical picture
+
+**Navigation Tip:** This diagram can be overwhelming at first glance. Start with the [High-Level System Architecture](#high-level-system-architecture) to get oriented, then use the focused diagrams to understand specific areas before returning to this comprehensive view.
+
+### Architecture Summary
+
+The Betterer architecture follows a **progressive disclosure pattern** - each diagram builds upon the previous ones while focusing on specific concerns:
+
+1. **[High-Level System Architecture](#high-level-system-architecture)** - Start here for the big picture
+2. **[AI Agents & Nova Models](#ai-agents--nova-models)** - Deep dive into the AI capabilities
+3. **[API Layer & Authentication](#api-layer--authentication)** - Understand the request lifecycle
+4. **[Event-Driven Workflow](#event-driven-workflow)** - See how async processing works
+5. **[Data Storage Architecture](#data-storage-architecture)** - Explore data patterns (planned)
+6. **[Complete System Diagram](#complete-system-diagram-reference)** - Reference for full complexity
+
+**Cross-Cutting Concerns:**
+- **Multi-tenancy**: Visible in API auth, data storage, and agent memory isolation
+- **Performance**: Parallel processing, connection reuse, and async workflows throughout
+- **Security**: JWT validation, tenant isolation, and secure external integrations
+- **Scalability**: Event-driven patterns and serverless architecture enable natural scaling
+
+**For Different Audiences:**
+- **New developers**: Start with High-Level, then focus on your area of work
+- **AI/ML engineers**: Focus on AI Agents & Nova Models diagram
+- **Backend developers**: API Layer & Authentication + Event-Driven Workflow
+- **DevOps/Infrastructure**: All diagrams, especially Event-Driven Workflow
+- **Architects**: Complete System Diagram after reviewing focused views
 
 ## Try It Yourself
 

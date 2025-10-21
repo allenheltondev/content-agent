@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { Suggestion } from '../../types';
 import { useActiveSuggestionManager } from '../../hooks/useActiveSuggestionManager';
 import { useOptimizedActiveSuggestionManager } from '../../hooks/useOptimizedActiveSuggestionManager';
-import { useSuggestionResolutionManager } from '../../hooks/useSuggestionResolutionManager';
 import { ActiveSuggestionArea } from './ActiveSuggestionArea';
 import { InteractiveSuggestionHighlights } from './InteractiveSuggestionHighlights';
 import { VirtualizedSuggestionHighlights } from './VirtualizedSuggestionHighlights';
@@ -291,61 +290,7 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
   // Initialize optimized state management if enabled
   // Optimized state can be enabled later if needed
 
-  // Initialize suggestion resolution manager for optimistic updates and batch processing
-  const resolutionManager = useSuggestionResolutionManager(
-    suggestions,
-    async (suggestionId: string, editedText?: string) => {
-      await Promise.resolve(onAcceptSuggestion(suggestionId, editedText));
-    },
-    async (suggestionId: string) => {
-      await Promise.resolve(onRejectSuggestion(suggestionId));
-    },
-    {
-      enableOptimisticUpdates: finalConfig.enableOptimisticUpdates,
-      enableBatchProcessing: finalConfig.enableBatchResolution,
-      batchSize: finalConfig.resolutionBatchSize,
-      batchDelay: 500,
-      enableAutoRetry: true,
-      maxRetries: 3,
-      enablePerformanceMonitoring: false,
-      onResolutionSuccess: (action) => {
-        // Show success feedback
-        const suggestion = suggestions.find(s => s.id === action.suggestionId);
-        if (suggestion) {
-          setActionFeedback({
-            type: 'accepted',
-            message: action.editedText
-              ? `${suggestion.type} suggestion accepted with edits`
-              : `${suggestion.type} suggestion ${action.action}ed`,
-            duration: 2000,
-            autoAdvance: finalConfig.enableAutoAdvance
-          });
-
-          // Auto-dismiss feedback
-          setTimeout(() => {
-            setActionFeedback(null);
-          }, 2000);
-        }
-
-        // Mark as resolved in the manager
-        activeSuggestionManager.resolveSuggestion(action.suggestionId);
-      },
-      onResolutionFailure: (action, error) => {
-        // Show error feedback
-        setActionFeedback({
-          type: 'rejected',
-          message: `Failed to ${action.action} suggestion: ${error}`,
-          duration: 3000,
-          autoAdvance: false
-        });
-
-        // Auto-dismiss error feedback
-        setTimeout(() => {
-          setActionFeedback(null);
-        }, 3000);
-      }
-    }
-  );
+  // Removed resolution manager to avoid double-click issues - using direct parent callbacks instead
 
   // Handle highlight clicks from InteractiveSuggestionHighlights
   const handleHighlightClick = useCallback((suggestionId: string) => {
@@ -363,17 +308,57 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
     }
   }, [activeSuggestionManager]);
 
-  // Handle suggestion acceptance with optimized resolution
+  // Handle suggestion acceptance - simplified to avoid double-click issues
   const handleAcceptSuggestion = useCallback((suggestionId: string, editedText?: string) => {
-    // Use resolution manager for optimistic updates and batch processing
-    resolutionManager.acceptSuggestion(suggestionId, editedText);
-  }, [resolutionManager]);
+    // Call the parent handler directly to avoid multiple resolution layers
+    onAcceptSuggestion(suggestionId, editedText);
 
-  // Handle suggestion rejection with optimized resolution
+    // Mark as resolved in the active suggestion manager
+    activeSuggestionManager.resolveSuggestion(suggestionId);
+
+    // Show feedback
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (suggestion) {
+      setActionFeedback({
+        type: 'accepted',
+        message: editedText
+          ? `${suggestion.type} suggestion accepted with edits`
+          : `${suggestion.type} suggestion accepted`,
+        duration: 2000,
+        autoAdvance: finalConfig.enableAutoAdvance
+      });
+
+      // Auto-dismiss feedback
+      setTimeout(() => {
+        setActionFeedback(null);
+      }, 2000);
+    }
+  }, [onAcceptSuggestion, activeSuggestionManager, suggestions, finalConfig.enableAutoAdvance]);
+
+  // Handle suggestion rejection - simplified to avoid double-click issues
   const handleRejectSuggestion = useCallback((suggestionId: string) => {
-    // Use resolution manager for optimistic updates and batch processing
-    resolutionManager.rejectSuggestion(suggestionId);
-  }, [resolutionManager]);
+    // Call the parent handler directly to avoid multiple resolution layers
+    onRejectSuggestion(suggestionId);
+
+    // Mark as resolved in the active suggestion manager
+    activeSuggestionManager.resolveSuggestion(suggestionId);
+
+    // Show feedback
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (suggestion) {
+      setActionFeedback({
+        type: 'rejected',
+        message: `${suggestion.type} suggestion rejected`,
+        duration: 2000,
+        autoAdvance: finalConfig.enableAutoAdvance
+      });
+
+      // Auto-dismiss feedback
+      setTimeout(() => {
+        setActionFeedback(null);
+      }, 2000);
+    }
+  }, [onRejectSuggestion, activeSuggestionManager, suggestions, finalConfig.enableAutoAdvance]);
 
   // Handle suggestion editing
   const handleEditSuggestion = useCallback((suggestionId: string, newText: string) => {
@@ -392,12 +377,8 @@ export const IntegratedActiveSuggestionSystem: React.FC<IntegratedActiveSuggesti
 
   // Performance optimization: memoize available suggestions for highlighting
   const availableSuggestionsForHighlighting = useMemo(() => {
-    // Use resolution manager's available suggestions if optimistic updates are enabled
-    if (finalConfig.enableOptimisticUpdates) {
-      return resolutionManager.availableSuggestions;
-    }
     return activeSuggestionManager.availableSuggestions;
-  }, [finalConfig.enableOptimisticUpdates, resolutionManager.availableSuggestions, activeSuggestionManager.availableSuggestions]);
+  }, [activeSuggestionManager.availableSuggestions]);
 
   // Log performance metrics periodically (development only)
   // Perf logging removed
