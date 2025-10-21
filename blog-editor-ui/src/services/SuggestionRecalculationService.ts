@@ -15,7 +15,7 @@ export interface ContentRange {
  */
 export interface SuggestionDelta {
   suggestionId: string;
-set: number;
+  oldStartOffset: number;
   oldEndOffset: number;
   newStartOffset: number;
   newEndOffset: number;

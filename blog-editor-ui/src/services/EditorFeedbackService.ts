@@ -21,7 +21,7 @@ export interface SuccessNotification {
   duration?: number;
   showIcon?: boolean;
   actionLabel?: string;
-  actionHa?: () => void;
+  actionHandler?: () => void;
 }
 
 /**
@@ -133,15 +133,14 @@ export class EditorFeedbackService {
    * Create recovery action configurations for an error
    */
   createRecoveryActions(errorInfo: EditorError): RecoveryActionConfig[] {
-    return errorInfo.recoveryActions.map(action => this.createRecoveryActionConfig(action, errorInfo));
+    return errorInfo.recoveryActions.map(action => this.createRecoveryActionConfig(action));
   }
 
   /**
    * Create individual recovery action configuration
    */
   private createRecoveryActionConfig(
-    action: RecoveryAction,
-    errorInfo: EditorError
+    action: RecoveryAction
   ): RecoveryActionConfig {
     const handler = this.recoveryHandlers.get(action) || (() => {
       console.warn(`No handler registered for recovery action: ${action}`);

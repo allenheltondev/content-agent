@@ -164,7 +164,7 @@ export class EditorErrorHandler {
   /**
    * Get user-friendly error messages
    */
-  private getUserFriendlyMessage(type: EditorErrorType, originalMessage: string): string {
+  private getUserFriendlyMessage(type: EditorErrorType, _originalMessage: string): string {
     switch (type) {
       case 'mode_switch_failed':
         return 'Unable to switch editor modes. Please try again or refresh the page.';

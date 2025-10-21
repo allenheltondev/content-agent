@@ -2,14 +2,7 @@ import { useCallback, useEffect } from 'react';
 import type { Suggestion, ContentDiff } from '../types';
 import type { SuggestionDelta } from '../services/SuggestionRecalculationService';
 
-/**
- * Cache key for suggestion position calculations
- */
-interface CacheKey {
-  contentHash: string;
-  suggestionIds: string;
-  diffsHash: string;
-}
+
 
 /**
  * Cached calculation result
@@ -221,11 +214,11 @@ export class SuggestionPositionCache {
     const now = Date.now();
     const keysToRemove: string[] = [];
 
-    for (const [key, cached] of this.cache.entries()) {
+    this.cache.forEach((cached, key) => {
       if (now - cached.timestamp > this.config.maxAge) {
         keysToRemove.push(key);
       }
-    }
+    });
 
     for (const key of keysToRemove) {
       this.cache.delete(key);

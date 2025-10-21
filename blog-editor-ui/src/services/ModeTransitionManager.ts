@@ -65,7 +65,7 @@ export class ModeTransitionManager {
   private retryCount = 0;
   private debounceTimer: NodeJS.Timeout | null = null;
   private transitionCache = new Map<string, { result: TransitionResult; timestamp: number }>();
-  private lastTransitionKey: string | null = null;
+
 
   constructor(config: Partial<TransitionConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -195,7 +195,9 @@ export class ModeTransitionManager {
     // Evict oldest entries if cache is full
     while (this.transitionCache.size >= this.config.cacheSize) {
       const firstKey = this.transitionCache.keys().next().value;
-      this.transitionCache.delete(firstKey);
+      if (firstKey) {
+        this.transitionCache.delete(firstKey);
+      }
     }
 
     this.transitionCache.set(key, {
@@ -434,7 +436,7 @@ export class ModeTransitionManager {
   /**
    * Handle transition from Review to Edit mode
    */
-  async handleReviewToEdit(context: {
+  async handleReviewToEdit(_context: {
     content?: string;
     contentAtLastReview?: string;
     currentSuggestions?: Suggestion[];

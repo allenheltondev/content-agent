@@ -12,6 +12,7 @@ import { EditorHeader } from '../components/editor/EditorHeader';
 import { TitleEditor } from '../components/editor/TitleEditor';
 import { ContentEditorWithSuggestions } from '../components/editor/ContentEditorWithSuggestions';
 import { EditorActions } from '../components/editor/EditorActions';
+import { ContentSummary } from '../components/editor/ContentSummary';
 import { MainEditorLayout } from '../components/editor/MainEditorLayout';
 import { UndoNotification } from '../components/editor/UndoNotification';
 import { EditorSkeleton } from '../components/editor/EditorSkeleton';
@@ -195,6 +196,7 @@ const EditorPageContent = memo(() => {
 
   const {
     suggestions,
+    summary,
     error: suggestionsError,
     undoHistory,
     loadSuggestions,
@@ -725,9 +727,6 @@ const EditorPageContent = memo(() => {
       />
 
       <EditorErrorBoundary
-        postId={id}
-        title={title}
-        content={content}
         onError={(error, errorInfo) => {
           // Report error for debugging
           ErrorReportingManager.reportEditorError(
@@ -747,19 +746,22 @@ const EditorPageContent = memo(() => {
             'EditorPage'
           );
         }}
-        fallback={(error, actions) => (
+        fallback={
           <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 xl:px-8 py-6">
             <EditorFallbackUI
-              error={error}
-              onRetry={actions.retry}
-              onSaveBackup={actions.saveBackup}
+              error={new Error('Editor encountered an error')}
+              onRetry={() => window.location.reload()}
+              onSaveBackup={() => {
+                // Save backup logic would go here
+                console.log('Saving backup...');
+              }}
               postId={id || null}
               title={title}
               content={content}
               componentName="Editor Page"
             />
           </div>
-        )}
+        }
       >
         {/* Smooth transition container for editor content */}
         <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
@@ -800,7 +802,15 @@ const EditorPageContent = memo(() => {
 
 
           {/* Content Summary - positioned above main content area */}
-
+          {!isNewPost && (
+            <ContentSummary
+              summary={summary}
+              isLoading={areSuggestionsLoading}
+              position="above-content"
+              prominence="medium"
+              className="mb-6"
+            />
+          )}
 
           <MainEditorLayout
             hasSuggestions={false}

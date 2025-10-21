@@ -200,7 +200,7 @@ export class ReviewService {
             },
             signal,
             // Add timeout for individual polling requests
-            ...(AbortSignal.timeout ? { signal: AbortSignal.timeout(15000) } : {})
+            ...(AbortSignal.timeout ? { signal: AbortSignal.timeout(300000) } : {})
           });
 
           if (response.ok) {

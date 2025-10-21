@@ -65,7 +65,7 @@ export const handler = async (event) => {
     const summary = await getSummary(tenantId, postId, postResponse.Item.version.N);
     return formatResponse(200, {
       suggestions,
-      ...summary && { summary }
+      ...(summary && { summary })
     });
   } catch (error) {
     console.error('Get suggestions error:', error);

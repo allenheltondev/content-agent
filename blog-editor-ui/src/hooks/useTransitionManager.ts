@@ -9,7 +9,6 @@ import type { TransitionProgress } from '../services/ModeTransitionManager';
 export function useTransitionManager() {
   const {
     isTransitioning,
-    getTransitionProgress,
     retryFailedTransition,
     cancelTransition,
     onTransitionProgress,

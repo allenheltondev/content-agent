@@ -24,13 +24,11 @@ export const TransitionProgressIndicator: React.FC<TransitionProgressIndicatorPr
     progressIcon,
     progress,
     message,
-    phase,
     canCancel
   } = useTransitionProgressDisplay();
 
   const {
     hasError,
-    errorMessage,
     canRetry,
     retry,
     dismiss
@@ -55,7 +53,7 @@ export const TransitionProgressIndicator: React.FC<TransitionProgressIndicatorPr
   `;
 
   // Error display
-  if (hasError && errorMessage) {
+  if (hasError) {
     return (
       <div className={`${baseClasses} bg-red-50 border-red-200`}>
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -68,7 +66,7 @@ export const TransitionProgressIndicator: React.FC<TransitionProgressIndicatorPr
                 </p>
                 {showDetails && (
                   <p className="text-sm text-red-600 mt-1">
-                    {errorMessage}
+                    An error occurred during transition
                   </p>
                 )}
               </div>
@@ -153,7 +151,7 @@ export const CompactTransitionIndicator: React.FC<{
   className?: string;
 }> = ({ className = '' }) => {
   const { shouldShow, progressIcon, message, progress } = useTransitionProgressDisplay();
-  const { hasError, errorMessage } = useTransitionErrorHandler();
+  const { hasError } = useTransitionErrorHandler();
 
   if (!shouldShow && !hasError) {
     return null;
@@ -188,24 +186,24 @@ export const CompactTransitionIndicator: React.FC<{
 export const TransitionToast: React.FC<{
   onClose?: () => void;
 }> = ({ onClose }) => {
-  const { shouldShow, progressIcon, message, phase } = useTransitionProgressDisplay();
-  const { hasError, errorMessage, canRetry, retry, dismiss } = useTransitionErrorHandler();
+  const { shouldShow, progressIcon, message } = useTransitionProgressDisplay();
+  const { hasError, canRetry, retry, dismiss } = useTransitionErrorHandler();
 
   // Auto-dismiss successful transitions
   React.useEffect(() => {
-    if (phase === 'completing' && !hasError) {
+    if (!shouldShow && !hasError) {
       const timer = setTimeout(() => {
         onClose?.();
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [phase, hasError, onClose]);
+  }, [shouldShow, hasError, onClose]);
 
   if (!shouldShow && !hasError) {
     return null;
   }
 
-  const isError = hasError && errorMessage;
+  const isError = hasError;
   const bgColor = isError ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200';
   const textColor = isError ? 'text-red-800' : 'text-blue-800';
 
@@ -223,9 +221,9 @@ export const TransitionToast: React.FC<{
           <p className={`text-sm font-medium ${textColor}`}>
             {isError ? 'Transition Failed' : message}
           </p>
-          {isError && errorMessage && (
+          {isError && (
             <p className="text-sm text-red-600 mt-1">
-              {errorMessage}
+              An error occurred during transition
             </p>
           )}
         </div>

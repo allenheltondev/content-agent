@@ -1,4 +1,4 @@
-import { DynamoDBClient, GetItemCommand, DeleteItemCommand, UpdateItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, DeleteItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { formatResponse, formatEmptyResponse } from '../utils/responses.mjs';
 import { updateSuggestionStatus as updateStatistics } from '../utils/tenant-statistics.mjs';

@@ -65,7 +65,7 @@ export const SuccessNotificationComponent = ({
 
   // Get animation classes
   const getAnimationClasses = () => {
-    const bases = 'transition-all duration-300 ease-in-out';
+    const baseClasses = 'transition-all duration-300 ease-in-out';
 
     if (!isVisible || isAnimating) {
       switch (position) {
@@ -157,7 +157,7 @@ export const SuccessNotificationComponent = ({
       </div>
 
       {/* CSS for progress bar animation */}
-      <style jsx>{`
+      <style>{`
         @keyframes shrink {
           from {
             width: 100%;

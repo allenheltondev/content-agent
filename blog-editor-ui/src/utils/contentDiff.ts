@@ -143,7 +143,9 @@ export function calculateContentDiff(oldContent: string, newContent: string): Co
   if (diffCache.size >= MAX_CACHE_SIZE) {
     // Remove oldest entry (simple FIFO)
     const firstKey = diffCache.keys().next().value;
-    diffCache.delete(firstKey);
+    if (firstKey) {
+      diffCache.delete(firstKey);
+    }
   }
   diffCache.set(cacheKey, diffs);
 

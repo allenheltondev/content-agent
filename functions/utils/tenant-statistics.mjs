@@ -128,40 +128,68 @@ export const updateSuggestionStatus = async (tenantId, suggestionType, newStatus
     ':now': now
   };
 
+  // Calculate net changes for each counter
+  const netChanges = {
+    acceptedSuggestions: 0,
+    rejectedSuggestions: 0,
+    deletedSuggestions: 0,
+    skippedSuggestions: 0,
+    typeAccepted: 0,
+    typeRejected: 0
+  };
+
   // Increment new status counters
   if (newStatus === 'accepted') {
-    addExpressions.push('acceptedSuggestions :one');
-    addExpressions.push('suggestionsByType.#type.accepted :one');
-    expressionAttributeValues[':one'] = 1;
+    netChanges.acceptedSuggestions += 1;
+    netChanges.typeAccepted += 1;
   } else if (newStatus === 'rejected') {
-    addExpressions.push('rejectedSuggestions :one');
-    addExpressions.push('suggestionsByType.#type.rejected :one');
-    expressionAttributeValues[':one'] = 1;
+    netChanges.rejectedSuggestions += 1;
+    netChanges.typeRejected += 1;
   } else if (newStatus === 'deleted') {
-    addExpressions.push('deletedSuggestions :one');
-    expressionAttributeValues[':one'] = 1;
+    netChanges.deletedSuggestions += 1;
   } else if (newStatus === 'skipped') {
-    addExpressions.push('skippedSuggestions :one');
-    expressionAttributeValues[':one'] = 1;
+    netChanges.skippedSuggestions += 1;
   }
 
   // Decrement old status counters if provided
   if (oldStatus && oldStatus !== newStatus) {
     if (oldStatus === 'accepted') {
-      addExpressions.push('acceptedSuggestions :minusOne');
-      addExpressions.push('suggestionsByType.#type.accepted :minusOne');
-      expressionAttributeValues[':minusOne'] = -1;
+      netChanges.acceptedSuggestions -= 1;
+      netChanges.typeAccepted -= 1;
     } else if (oldStatus === 'rejected') {
-      addExpressions.push('rejectedSuggestions :minusOne');
-      addExpressions.push('suggestionsByType.#type.rejected :minusOne');
-      expressionAttributeValues[':minusOne'] = -1;
+      netChanges.rejectedSuggestions -= 1;
+      netChanges.typeRejected -= 1;
     } else if (oldStatus === 'deleted') {
-      addExpressions.push('deletedSuggestions :minusOne');
-      expressionAttributeValues[':minusOne'] = -1;
+      netChanges.deletedSuggestions -= 1;
     } else if (oldStatus === 'skipped') {
-      addExpressions.push('skippedSuggestions :minusOne');
-      expressionAttributeValues[':minusOne'] = -1;
+      netChanges.skippedSuggestions -= 1;
     }
+  }
+
+  // Build ADD expressions for non-zero net changes
+  if (netChanges.acceptedSuggestions !== 0) {
+    addExpressions.push('acceptedSuggestions :acceptedChange');
+    expressionAttributeValues[':acceptedChange'] = netChanges.acceptedSuggestions;
+  }
+  if (netChanges.rejectedSuggestions !== 0) {
+    addExpressions.push('rejectedSuggestions :rejectedChange');
+    expressionAttributeValues[':rejectedChange'] = netChanges.rejectedSuggestions;
+  }
+  if (netChanges.deletedSuggestions !== 0) {
+    addExpressions.push('deletedSuggestions :deletedChange');
+    expressionAttributeValues[':deletedChange'] = netChanges.deletedSuggestions;
+  }
+  if (netChanges.skippedSuggestions !== 0) {
+    addExpressions.push('skippedSuggestions :skippedChange');
+    expressionAttributeValues[':skippedChange'] = netChanges.skippedSuggestions;
+  }
+  if (netChanges.typeAccepted !== 0) {
+    addExpressions.push('suggestionsByType.#type.accepted :typeAcceptedChange');
+    expressionAttributeValues[':typeAcceptedChange'] = netChanges.typeAccepted;
+  }
+  if (netChanges.typeRejected !== 0) {
+    addExpressions.push('suggestionsByType.#type.rejected :typeRejectedChange');
+    expressionAttributeValues[':typeRejectedChange'] = netChanges.typeRejected;
   }
 
   // Build final update expression

@@ -8,7 +8,7 @@ import { useAccessibilityAnnouncements } from '../hooks/useAccessibilityAnnounce
 import { useFocusManagement } from '../hooks/useFocusManagement';
 import { useModeTransitionErrorHandling } from '../hooks/useEditorErrorHandling';
 import { useDebounce } from '../hooks/useDebounce';
-import { performanceMonitor } from '../utils/performanceMonitor';
+// performanceMonitor removed to resolve build issues
 
 // Editor mode types
 export type EditorMode = 'edit' | 'review';
@@ -85,8 +85,6 @@ export const EditorModeProvider = ({
     handleSuggestionRecalculationError,
     handleSuggestionApiError,
     handleModeTransitionSuccess,
-    enableFallbackMode,
-    fallbackModeActive,
   } = useModeTransitionErrorHandling();
 
   // Core mode state - default to review mode if suggestions exist
@@ -170,7 +168,7 @@ export const EditorModeProvider = ({
 
         // Handle error with comprehensive feedback
         await handleModeTransitionError(
-          errorMessage,
+          new Error(errorMessage),
           currentMode,
           'edit',
           {
@@ -202,7 +200,7 @@ export const EditorModeProvider = ({
 
       // Handle error with comprehensive feedback
       await handleModeTransitionError(
-        error,
+        error instanceof Error ? error : new Error(String(error)),
         currentMode,
         'edit',
         {
@@ -297,7 +295,7 @@ export const EditorModeProvider = ({
         // Determine error type based on the failure reason
         if (errorMessage.toLowerCase().includes('suggestion')) {
           await handleSuggestionRecalculationError(
-            errorMessage,
+            new Error(errorMessage),
             {
               content: currentContentRef.current,
               contentAtLastReview,
@@ -307,7 +305,7 @@ export const EditorModeProvider = ({
           );
         } else {
           await handleModeTransitionError(
-            errorMessage,
+            new Error(errorMessage),
             currentMode,
             'review',
             {
@@ -342,7 +340,7 @@ export const EditorModeProvider = ({
       // Handle different types of errors appropriately
       if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('fetch')) {
         await handleSuggestionApiError(
-          error,
+          error instanceof Error ? error : new Error(String(error)),
           {
             content: currentContentRef.current,
             contentAtLastReview,
@@ -352,7 +350,7 @@ export const EditorModeProvider = ({
         );
       } else if (errorMessage.toLowerCase().includes('suggestion')) {
         await handleSuggestionRecalculationError(
-          error,
+          error instanceof Error ? error : new Error(String(error)),
           {
             content: currentContentRef.current,
             contentAtLastReview,
@@ -362,7 +360,7 @@ export const EditorModeProvider = ({
         );
       } else {
         await handleModeTransitionError(
-          error,
+          error instanceof Error ? error : new Error(String(error)),
           currentMode,
           'review',
           {
@@ -420,22 +418,14 @@ export const EditorModeProvider = ({
     contentChangesRef.current = [];
   }, []);
 
-  // Recalculate suggestions manually with performance monitoring
+  // Recalculate suggestions manually
   const recalculateSuggestions = useCallback(async () => {
     if (!onSuggestionRecalculation) return;
 
     try {
       setPendingRecalculation(true);
 
-      await performanceMonitor.measureAsync(
-        'suggestion-recalculation',
-        () => onSuggestionRecalculation(contentAtLastReview, currentSuggestions),
-        {
-          contentLength: contentAtLastReview.length,
-          suggestionCount: currentSuggestions.length,
-          hasContentChanges: hasContentChanges()
-        }
-      );
+      await onSuggestionRecalculation(contentAtLastReview, currentSuggestions);
 
       setSuggestionVersion(prev => prev + 1);
     } catch (error) {
@@ -546,27 +536,15 @@ export const EditorModeProvider = ({
 
     if (oldContent === newContent) return;
 
-    // Measure content diff calculation performance
-    const diffs = performanceMonitor.measure(
-      'content-diff-calculation',
-      () => calculateContentDiff(oldContent, newContent),
-      {
-        oldContentLength: oldContent.length,
-        newContentLength: newContent.length,
-        isLargeDocument: Math.max(oldContent.length, newContent.length) > 10000
-      }
-    );
+    // Calculate content diffs directly
+    const diffs = calculateContentDiff(oldContent, newContent);
 
     // Add new diffs to the tracking array
     contentChangesRef.current.push(...diffs);
 
     // Merge overlapping diffs to keep the array manageable
     if (contentChangesRef.current.length > 10) {
-      contentChangesRef.current = performanceMonitor.measure(
-        'content-diff-merge',
-        () => mergeContentDiffs(contentChangesRef.current),
-        { diffCount: contentChangesRef.current.length }
-      );
+      contentChangesRef.current = mergeContentDiffs(contentChangesRef.current);
     }
   }, []);
 

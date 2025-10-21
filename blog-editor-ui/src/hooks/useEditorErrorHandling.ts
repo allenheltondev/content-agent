@@ -276,7 +276,7 @@ export function useModeTransitionErrorHandling() {
 
   const handleModeTransitionError = useCallback(async (
     error: Error | string,
-    fromMode: 'edit' | 'review',
+    _fromMode: 'edit' | 'review',
     toMode: 'edit' | 'review',
     context?: Record<string, any>
   ) => {
@@ -284,7 +284,6 @@ export function useModeTransitionErrorHandling() {
       error,
       'mode_switch_failed',
       {
-        fromMode,
         toMode,
         ...context,
       }
@@ -314,7 +313,7 @@ export function useModeTransitionErrorHandling() {
   }, [errorHandling]);
 
   const handleModeTransitionSuccess = useCallback((
-    fromMode: 'edit' | 'review',
+    _fromMode: 'edit' | 'review',
     toMode: 'edit' | 'review',
     suggestionsUpdated?: boolean
   ) => {

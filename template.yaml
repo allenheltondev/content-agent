@@ -1075,11 +1075,13 @@ Resources:
           InputTransformer:
             InputPathsMap:
               message: $.detail.success
+              tenantId: $.detail.tenantId
+              contentId: $.detail.contentId
             InputTemplate: '"<message>"'
           HttpParameters:
             PathParameterValues:
-              - $.detail.cacheName
-              - $.detail.topicName
+              - !Ref MomentoCacheName
+              - "<tenantId>_<contentId>"
 
 Outputs:
   UserPoolId:
