@@ -165,7 +165,7 @@ export class EditorErrorBoundary extends Component<EditorErrorBoundaryProps, Edi
                 error={editorError}
                 onRecoveryAction={this.handleRecoveryAction}
                 onDismiss={this.handleDismiss}
-                showTechnicalDetails={process.env.NODE_ENV === 'development'}
+                showTechnicalDetails={import.meta.env.DEV}
               />
 
               {/* Additional context for error boundary */}
@@ -226,7 +226,7 @@ export class EditorErrorBoundary extends Component<EditorErrorBoundaryProps, Edi
               </button>
             </div>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <details className="mt-4 text-left">
                 <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
                   Error Details (Development)

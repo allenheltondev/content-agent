@@ -72,7 +72,7 @@ export function useContentChangeTracker() {
 export function useDebouncedContentChangeTracker(debounceMs: number = 300) {
   const { trackContentChange, currentMode } = useEditorMode();
   const previousContentRef = useRef<string>('');
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitializedRef = useRef(false);
 
   // Initialize the tracker with initial content

@@ -63,7 +63,7 @@ export class ModeTransitionManager {
   private transitionAbortController: AbortController | null = null;
   private progressCallbacks: Set<(progress: TransitionProgress) => void> = new Set();
   private retryCount = 0;
-  private debounceTimer: NodeJS.Timeout | null = null;
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private transitionCache = new Map<string, { result: TransitionResult; timestamp: number }>();
 
 

@@ -6,7 +6,7 @@ import type { EditorMode } from '../contexts/EditorModeContext';
  */
 export const useFocusManagement = () => {
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const focusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Store the currently focused element
   const storeFocus = useCallback(() => {
