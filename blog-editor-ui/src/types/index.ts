@@ -5,7 +5,7 @@ export interface BlogPost {
   id: string;
   title: string;
   body: string;
-  status: 'draft' | 'review' | 'finalized' | 'published' | 'abandoned';
+  status: 'Draft' | 'Complete' | 'review' | 'published' | 'abandoned';
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -72,6 +72,10 @@ export interface SubmitReviewRequest {
 
 export interface FinalizeRequest {
   postId: string;
+}
+
+export interface UpdatePostStatusRequest {
+  status: 'Draft' | 'Complete';
 }
 
 // Profile API request/response types

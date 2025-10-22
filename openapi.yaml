@@ -231,6 +231,60 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /posts/{postId}/statuses:
+    parameters:
+      - $ref: "#/components/parameters/postId"
+    post:
+      summary: Update post status
+      description: Update the status of a blog post (Draft or Complete), ensuring it belongs to the user's tenant
+      tags: [Posts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [Draft, Complete]
+                  description: The new status for the post
+            examples:
+              draft:
+                summary: Set post status to Draft
+                value:
+                  status: Draft
+              complete:
+                summary: Set post status to Complete
+                value:
+                  status: Complete
+      responses:
+        204:
+          description: Post status updated successfully
+        400:
+          description: Invalid request body or status value
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid status value"
+        401:
+          $ref: "#/components/responses/Unauthorized"
+        404:
+          $ref: "#/components/responses/NotFound"
+        500:
+          $ref: "#/components/responses/InternalError"
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UpdatePostStatusFunction.Arn}/invocations
+        httpMethod: POST
+        type: aws_proxy
+
   /posts/{postId}/suggestions/{suggestionId}/statuses:
     parameters:
       - $ref: "#/components/parameters/postId"

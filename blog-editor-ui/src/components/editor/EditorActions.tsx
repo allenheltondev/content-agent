@@ -13,6 +13,7 @@ interface EditorActionsProps {
   onSubmitReview: () => void;
   onFinalize: () => void;
   isSaving: boolean;
+  isFinalizing?: boolean;
   isDirty: boolean;
   canSubmit: boolean;
   post: BlogPost | null;
@@ -29,6 +30,7 @@ export const EditorActions = ({
   onSubmitReview,
   onFinalize,
   isSaving,
+  isFinalizing = false,
   isDirty,
   canSubmit,
   post,
@@ -41,7 +43,7 @@ export const EditorActions = ({
 }: EditorActionsProps) => {
 
   // Check if workflow actions should be disabled based on post status
-  const isWorkflowDisabled = !post || post.status === 'finalized' || post.status === 'published';
+  const isWorkflowDisabled = !post || post.status === 'Complete' || post.status === 'published';
   const isInReview = post?.status === 'review';
 
   // Get status display information
@@ -49,7 +51,7 @@ export const EditorActions = ({
     if (!post) return null;
 
     switch (post.status) {
-      case 'draft':
+      case 'Draft':
         return {
           text: 'Draft',
           color: 'text-gray-600',
@@ -63,9 +65,9 @@ export const EditorActions = ({
           bgColor: 'bg-primary/20',
           icon: <PaperAirplaneIcon className="h-4 w-4" />
         };
-      case 'finalized':
+      case 'Complete':
         return {
-          text: 'Finalized',
+          text: 'Complete',
           color: 'text-green-600',
           bgColor: 'bg-green-100',
           icon: <CheckCircleIcon className="h-4 w-4" />
@@ -128,7 +130,7 @@ export const EditorActions = ({
               <div className="flex items-center text-sm text-gray-500">
                 <InformationCircleIcon className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">
-                  {post.status === 'finalized' ? 'Post is finalized' :
+                  {post.status === 'Complete' ? 'Post is complete' :
                    post.status === 'published' ? 'Post is published' : 'Read-only mode'}
                 </span>
                 <span className="sm:hidden">Read-only</span>
@@ -157,17 +159,18 @@ export const EditorActions = ({
           {/* Finalize Draft button */}
           <button
             onClick={onFinalize}
-            disabled={!canSubmit || isSaving || isDirty || isWorkflowDisabled}
+            disabled={!canSubmit || isSaving || isFinalizing || isDirty || isWorkflowDisabled}
             className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title={
-              isWorkflowDisabled ? "Cannot finalize already finalized or published posts" :
+              isWorkflowDisabled ? "Cannot finalize already completed or published posts" :
               isDirty ? "Save your changes before finalizing" :
+              isFinalizing ? "Finalizing draft..." :
               "Mark this post as complete and ready for publication"
             }
           >
             <CheckCircleIcon className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Finalize Draft</span>
-            <span className="sm:hidden">Finalize</span>
+            <span className="hidden sm:inline">{isFinalizing ? 'Finalizing...' : 'Finalize Draft'}</span>
+            <span className="sm:hidden">{isFinalizing ? 'Finalizing...' : 'Finalize'}</span>
           </button>
         </div>
       </div>

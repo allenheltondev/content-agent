@@ -600,6 +600,36 @@ Resources:
             Path: /posts/{postId}
             Method: PUT
 
+  UpdatePostStatusFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        <<: *esbuild-properties
+        EntryPoints:
+          - api/update-post-status.mjs
+    Properties:
+      Handler: api/update-post-status.handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ContentTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ContentTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BlogApi
+            Path: /posts/{postId}/statuses
+            Method: POST
+
   PostProcessingFunction:
     Type: AWS::Serverless::Function
     Metadata:

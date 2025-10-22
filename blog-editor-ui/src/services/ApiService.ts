@@ -7,6 +7,7 @@ import type {
   SuggestionsResponse,
   SubmitReviewRequest,
   FinalizeRequest,
+  UpdatePostStatusRequest,
   ApiError,
   ApiServiceConfig,
   UserProfile,
@@ -314,6 +315,21 @@ export class ApiService {
       throw new Error('Post ID is required');
     }
     return this.put<BlogPost>(`/api/posts/${encodeURIComponent(id)}`, post, signal);
+  }
+
+  /**
+   * Update post status (Draft or Complete)
+   */
+  async updatePostStatus(id: string, status: 'Draft' | 'Complete', signal?: AbortSignal): Promise<void> {
+    if (!id) {
+      throw new Error('Post ID is required');
+    }
+    if (!['Draft', 'Complete'].includes(status)) {
+      throw new Error('Status must be either "Draft" or "Complete"');
+    }
+
+    const request: UpdatePostStatusRequest = { status };
+    await this.post<void>(`/api/posts/${encodeURIComponent(id)}/statuses`, request, signal);
   }
 
   /**

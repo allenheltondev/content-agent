@@ -103,11 +103,11 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
 
   const getStatusColor = (status: BlogPost['status']) => {
     switch (status) {
-      case 'draft':
+      case 'Draft':
         return 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800 border border-gray-200';
       case 'review':
         return 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800 border border-yellow-200';
-      case 'finalized':
+      case 'Complete':
         return 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border border-green-200';
       case 'published':
         return 'bg-gradient-to-r from-primary/10 to-primary/20 text-primary border border-primary/20';
