@@ -26,12 +26,12 @@ export const MainEditorLayout: React.FC<MainEditorLayoutProps> = ({
       {hasSuggestions && (
         <>
           {/* Mobile/Tablet: Show sidebar below content */}
-          <div className="xl:hidden">
+          <div className="lg:hidden">
             {sidebar}
           </div>
 
           {/* Desktop: Show sidebar on right with fixed width */}
-          <div className="hidden xl:block w-80 flex-shrink-0">
+          <div className="hidden lg:block w-80 flex-shrink-0">
             {sidebar}
           </div>
         </>

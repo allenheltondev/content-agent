@@ -52,11 +52,19 @@ export const SuggestionStats = ({
 
   return (
     <div className={`bg-white border border-gray-200 rounded-lg p-3 sm:p-4 ${className}`}>
-      {/* Header */}
+      {/* Header with prominent active count */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 mb-3">
-        <h3 className="text-sm font-medium text-gray-900">
-          Suggestions
-        </h3>
+        <div className="flex items-center space-x-3">
+          <h3 className="text-sm font-medium text-gray-900">
+            Suggestions
+          </h3>
+          {hasActiveSuggestions && (
+            <div className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+              <span className="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
+              {stats.total} active
+            </div>
+          )}
+        </div>
 
         {stats.canUndo && onUndoClick && (
           <button

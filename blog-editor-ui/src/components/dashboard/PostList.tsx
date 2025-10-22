@@ -6,6 +6,7 @@ import { useAsyncOperation } from '../../hooks/useErrorHandling';
 import { LoadingState } from '../common/LoadingState';
 import { ErrorDisplay } from '../common/ErrorDisplay';
 import { AsyncErrorBoundary } from '../common/AsyncErrorBoundary';
+import { NewPostModal } from '../common/NewPostModal';
 import { ARIA_LABELS, screenReader } from '../../utils/accessibility';
 
 interface PostListProps {
@@ -14,6 +15,7 @@ interface PostListProps {
 
 export const PostList = ({ onCreatePost }: PostListProps) => {
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
   const navigate = useNavigate();
 
   // Use async operation hook for loading posts
@@ -43,18 +45,37 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
 
   const handleCreatePost = () => {
     try {
-      // Navigate to editor with "new" identifier
-      navigate('/editor/new', { replace: false });
+      // Open modal instead of direct navigation
+      setIsNewPostModalOpen(true);
 
       // Announce to screen readers
-      screenReader.announce('Navigating to create new post', 'polite');
+      screenReader.announce('Opening new post creation modal', 'polite');
 
       // Call optional callback
       onCreatePost?.();
     } catch (error) {
+      console.error('Failed to open modal:', error);
+    }
+  };
+
+  const handleModalClose = () => {
+    setIsNewPostModalOpen(false);
+  };
+
+  const handlePostCreated = (postId: string) => {
+    try {
+      // Navigate to editor with new post ID
+      navigate(`/editor/${postId}`, { replace: false });
+
+      // Close modal after successful creation and navigation
+      setIsNewPostModalOpen(false);
+
+      // Announce to screen readers for successful creation
+      screenReader.announce('Post created successfully. Opening editor.', 'polite');
+    } catch (error) {
       console.error('Navigation failed:', error);
       // Fallback navigation
-      window.location.href = '/editor/new';
+      window.location.href = `/editor/${postId}`;
     }
   };
 
@@ -278,6 +299,13 @@ export const PostList = ({ onCreatePost }: PostListProps) => {
           ))}
         </div>
       )}
+
+      {/* New Post Modal */}
+      <NewPostModal
+        isOpen={isNewPostModalOpen}
+        onClose={handleModalClose}
+        onPostCreated={handlePostCreated}
+      />
       </div>
     </AsyncErrorBoundary>
   );

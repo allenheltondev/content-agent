@@ -26,6 +26,7 @@ export interface SuggestionActionButtonsProps {
   className?: string;
   onFeedback?: (feedback: SuggestionActionFeedback) => void;
   fullContent?: string; // Full content for enhanced preview
+  onSuggestionResolved?: (suggestionId: string) => void; // Callback for auto-advance
 }
 
 /**
@@ -40,7 +41,8 @@ export const SuggestionActionButtons: React.FC<SuggestionActionButtonsProps> = (
   allowEditing = true,
   className = '',
   onFeedback,
-  fullContent
+  fullContent,
+  onSuggestionResolved
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(suggestion.replaceWith);
@@ -135,6 +137,9 @@ export const SuggestionActionButtons: React.FC<SuggestionActionButtonsProps> = (
         autoAdvance: true
       });
 
+      // Notify for auto-advance
+      onSuggestionResolved?.(suggestion.id);
+
       // Reset editing state after accept
       setIsEditing(false);
       setEditedText(suggestion.replaceWith);
@@ -161,6 +166,9 @@ export const SuggestionActionButtons: React.FC<SuggestionActionButtonsProps> = (
         duration: 2000,
         autoAdvance: true
       });
+
+      // Notify for auto-advance
+      onSuggestionResolved?.(suggestion.id);
 
       // Reset editing state after reject
       setIsEditing(false);

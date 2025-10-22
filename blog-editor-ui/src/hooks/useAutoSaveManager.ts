@@ -136,8 +136,13 @@ export function useAutoSaveManager({
       return;
     }
 
-    // Skip save if both title and content are empty
-    if (!postData.title && !postData.content) {
+    // Skip save if both title and content are empty, unless:
+    // 1. This is a forced save, OR
+    // 2. The previous state had content (user is clearing content)
+    const previouslyHadContent = lastSavedStateRef.current &&
+      (lastSavedStateRef.current.title || lastSavedStateRef.current.content);
+
+    if (!forceUpdate && !postData.title && !postData.content && !previouslyHadContent) {
       return;
     }
 
@@ -183,7 +188,13 @@ export function useAutoSaveManager({
 
   // Debounced auto-save effect - use memoized currentState to prevent unnecessary effect runs
   useEffect(() => {
-    if (!enabled || (!currentState.title && !currentState.content)) {
+    // Always clear existing timeout first
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    if (!enabled) {
       return;
     }
 
@@ -194,9 +205,13 @@ export function useAutoSaveManager({
       return; // Skip scheduling a save on initial load
     }
 
-    // Clear existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+    // Don't schedule auto-save if both title and content are empty,
+    // unless the previous state had content (user is clearing content)
+    const previouslyHadContent = lastSavedStateRef.current &&
+      (lastSavedStateRef.current.title || lastSavedStateRef.current.content);
+
+    if (!currentState.title && !currentState.content && !previouslyHadContent) {
+      return;
     }
 
     // Set new timeout for auto-save
@@ -208,6 +223,7 @@ export function useAutoSaveManager({
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
     };
   }, [currentState, enabled, debounceMs, saveWithRetry, postId]);

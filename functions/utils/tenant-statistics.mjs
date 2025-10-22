@@ -47,7 +47,8 @@ export const createTenantStatistics = async (tenantId) => {
       spelling: { total: 0, accepted: 0, rejected: 0 },
       style: { total: 0, accepted: 0, rejected: 0 },
       fact: { total: 0, accepted: 0, rejected: 0 },
-      brand: { total: 0, accepted: 0, rejected: 0 }
+      brand: { total: 0, accepted: 0, rejected: 0 },
+      llm: { total: 0, accepted: 0, rejected: 0 }
     },
     createdAt: now,
     updatedAt: now
@@ -78,32 +79,32 @@ export const createTenantStatistics = async (tenantId) => {
  * @returns {Promise<void>}
  */
 export const incrementSuggestionCreated = async (tenantId, suggestionType) => {
-  const now = new Date().toISOString();
-
   try {
-    await ddb.send(new UpdateItemCommand({
-      TableName: TABLE_NAME,
-      Key: marshall({
-        pk: tenantId,
-        sk: 'stats'
-      }),
-      UpdateExpression: 'ADD totalSuggestions :one, suggestionsByType.#type.total :one SET updatedAt = :now',
-      ExpressionAttributeNames: {
-        '#type': suggestionType
-      },
-      ExpressionAttributeValues: marshall({
-        ':one': 1,
-        ':now': now
-      })
-    }));
-  } catch (error) {
-    if (error.name === 'ValidationException' && error.message.includes('does not exist')) {
-      await createTenantStatistics(tenantId);
-      await incrementSuggestionCreated(tenantId, suggestionType);
-    } else {
-      console.error('Error incrementing suggestion created:', error);
-      throw error;
+    // Get current stats or create if doesn't exist
+    let stats = await getTenantStatistics(tenantId);
+    if (!stats) {
+      stats = await createTenantStatistics(tenantId);
     }
+
+    // Ensure suggestion type exists in stats
+    if (!stats.suggestionsByType[suggestionType]) {
+      stats.suggestionsByType[suggestionType] = { total: 0, accepted: 0, rejected: 0 };
+    }
+
+    // Increment counters
+    stats.totalSuggestions = (stats.totalSuggestions || 0) + 1;
+    stats.suggestionsByType[suggestionType].total = (stats.suggestionsByType[suggestionType].total || 0) + 1;
+    stats.updatedAt = new Date().toISOString();
+
+    // Save the updated stats
+    await ddb.send(new PutItemCommand({
+      TableName: TABLE_NAME,
+      Item: marshall(stats)
+    }));
+
+  } catch (error) {
+    console.error('Error incrementing suggestion created:', error);
+    // Don't throw - let the main operation continue
   }
 };
 
@@ -116,113 +117,58 @@ export const incrementSuggestionCreated = async (tenantId, suggestionType) => {
  * @returns {Promise<void>}
  */
 export const updateSuggestionStatus = async (tenantId, suggestionType, newStatus, oldStatus = null) => {
-  const now = new Date().toISOString();
-
-  // Build update expression parts
-  const addExpressions = [];
-  const setExpressions = ['updatedAt = :now'];
-  const expressionAttributeNames = {
-    '#type': suggestionType
-  };
-  const expressionAttributeValues = {
-    ':now': now
-  };
-
-  // Calculate net changes for each counter
-  const netChanges = {
-    acceptedSuggestions: 0,
-    rejectedSuggestions: 0,
-    deletedSuggestions: 0,
-    skippedSuggestions: 0,
-    typeAccepted: 0,
-    typeRejected: 0
-  };
-
-  // Increment new status counters
-  if (newStatus === 'accepted') {
-    netChanges.acceptedSuggestions += 1;
-    netChanges.typeAccepted += 1;
-  } else if (newStatus === 'rejected') {
-    netChanges.rejectedSuggestions += 1;
-    netChanges.typeRejected += 1;
-  } else if (newStatus === 'deleted') {
-    netChanges.deletedSuggestions += 1;
-  } else if (newStatus === 'skipped') {
-    netChanges.skippedSuggestions += 1;
-  }
-
-  // Decrement old status counters if provided
-  if (oldStatus && oldStatus !== newStatus) {
-    if (oldStatus === 'accepted') {
-      netChanges.acceptedSuggestions -= 1;
-      netChanges.typeAccepted -= 1;
-    } else if (oldStatus === 'rejected') {
-      netChanges.rejectedSuggestions -= 1;
-      netChanges.typeRejected -= 1;
-    } else if (oldStatus === 'deleted') {
-      netChanges.deletedSuggestions -= 1;
-    } else if (oldStatus === 'skipped') {
-      netChanges.skippedSuggestions -= 1;
-    }
-  }
-
-  // Build ADD expressions for non-zero net changes
-  if (netChanges.acceptedSuggestions !== 0) {
-    addExpressions.push('acceptedSuggestions :acceptedChange');
-    expressionAttributeValues[':acceptedChange'] = netChanges.acceptedSuggestions;
-  }
-  if (netChanges.rejectedSuggestions !== 0) {
-    addExpressions.push('rejectedSuggestions :rejectedChange');
-    expressionAttributeValues[':rejectedChange'] = netChanges.rejectedSuggestions;
-  }
-  if (netChanges.deletedSuggestions !== 0) {
-    addExpressions.push('deletedSuggestions :deletedChange');
-    expressionAttributeValues[':deletedChange'] = netChanges.deletedSuggestions;
-  }
-  if (netChanges.skippedSuggestions !== 0) {
-    addExpressions.push('skippedSuggestions :skippedChange');
-    expressionAttributeValues[':skippedChange'] = netChanges.skippedSuggestions;
-  }
-  if (netChanges.typeAccepted !== 0) {
-    addExpressions.push('suggestionsByType.#type.accepted :typeAcceptedChange');
-    expressionAttributeValues[':typeAcceptedChange'] = netChanges.typeAccepted;
-  }
-  if (netChanges.typeRejected !== 0) {
-    addExpressions.push('suggestionsByType.#type.rejected :typeRejectedChange');
-    expressionAttributeValues[':typeRejectedChange'] = netChanges.typeRejected;
-  }
-
-  // Build final update expression
-  let updateExpression = '';
-  if (addExpressions.length > 0) {
-    updateExpression += 'ADD ' + addExpressions.join(', ');
-  }
-  if (setExpressions.length > 0) {
-    if (updateExpression) updateExpression += ' ';
-    updateExpression += 'SET ' + setExpressions.join(', ');
-  }
-
   try {
-    await ddb.send(new UpdateItemCommand({
-      TableName: TABLE_NAME,
-      Key: marshall({
-        pk: tenantId,
-        sk: 'stats'
-      }),
-      UpdateExpression: updateExpression,
-      ExpressionAttributeNames: expressionAttributeNames,
-      ExpressionAttributeValues: marshall(expressionAttributeValues)
-    }));
-  } catch (error) {
-    if (error.name === 'ValidationException' && error.message.includes('does not exist')) {
-      // Statistics record doesn't exist, create it first
-      await createTenantStatistics(tenantId);
-      // Retry the update
-      await updateSuggestionStatus(tenantId, suggestionType, newStatus, oldStatus);
-    } else {
-      console.error('Error updating suggestion status:', error);
-      throw error;
+    // Get current stats or create if doesn't exist
+    let stats = await getTenantStatistics(tenantId);
+    if (!stats) {
+      stats = await createTenantStatistics(tenantId);
     }
+
+    // Ensure suggestion type exists in stats
+    if (!stats.suggestionsByType[suggestionType]) {
+      stats.suggestionsByType[suggestionType] = { total: 0, accepted: 0, rejected: 0 };
+    }
+
+    // Decrement old status if changing from existing status
+    if (oldStatus && oldStatus !== newStatus) {
+      if (oldStatus === 'accepted') {
+        stats.acceptedSuggestions = Math.max(0, (stats.acceptedSuggestions || 0) - 1);
+        stats.suggestionsByType[suggestionType].accepted = Math.max(0, stats.suggestionsByType[suggestionType].accepted - 1);
+      } else if (oldStatus === 'rejected') {
+        stats.rejectedSuggestions = Math.max(0, (stats.rejectedSuggestions || 0) - 1);
+        stats.suggestionsByType[suggestionType].rejected = Math.max(0, stats.suggestionsByType[suggestionType].rejected - 1);
+      } else if (oldStatus === 'deleted') {
+        stats.deletedSuggestions = Math.max(0, (stats.deletedSuggestions || 0) - 1);
+      } else if (oldStatus === 'skipped') {
+        stats.skippedSuggestions = Math.max(0, (stats.skippedSuggestions || 0) - 1);
+      }
+    }
+
+    // Increment new status
+    if (newStatus === 'accepted') {
+      stats.acceptedSuggestions = (stats.acceptedSuggestions || 0) + 1;
+      stats.suggestionsByType[suggestionType].accepted = (stats.suggestionsByType[suggestionType].accepted || 0) + 1;
+    } else if (newStatus === 'rejected') {
+      stats.rejectedSuggestions = (stats.rejectedSuggestions || 0) + 1;
+      stats.suggestionsByType[suggestionType].rejected = (stats.suggestionsByType[suggestionType].rejected || 0) + 1;
+    } else if (newStatus === 'deleted') {
+      stats.deletedSuggestions = (stats.deletedSuggestions || 0) + 1;
+    } else if (newStatus === 'skipped') {
+      stats.skippedSuggestions = (stats.skippedSuggestions || 0) + 1;
+    }
+
+    // Update timestamp
+    stats.updatedAt = new Date().toISOString();
+
+    // Save the updated stats
+    await ddb.send(new PutItemCommand({
+      TableName: TABLE_NAME,
+      Item: marshall(stats)
+    }));
+
+  } catch (error) {
+    console.error('Error updating suggestion status:', error);
+    // Don't throw - let the main operation continue
   }
 };
 

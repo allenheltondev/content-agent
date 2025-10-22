@@ -1,6 +1,7 @@
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { formatResponse } from '../utils/responses.mjs';
+import { getInitialVersion } from '../utils/versioning.mjs';
 
 const ddb = new DynamoDBClient();
 
@@ -32,7 +33,7 @@ export const handler = async (event) => {
       title: item.title || '',
       body: item.body || '',
       status: item.status || 'draft',
-      version: item.version || 1,
+      version: item.version || getInitialVersion(),
       createdAt: item.createdAt,
       updatedAt: item.updatedAt
     };

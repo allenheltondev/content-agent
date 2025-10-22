@@ -105,12 +105,6 @@ The diagrams are designed to build upon each other, moving from high-level conce
 ### AI Agents & Nova Models
 
 **Focus:** Specialized AI agents, Nova model assignments, and Bedrock AgentCore memory system
-**Use Case:** Understanding the AI architecture, agent specialization, and memory persistence patterns
-**Related Sections:**
-- See [High-Level System Architecture](#high-level-system-architecture) for overall system context
-- See [Event-Driven Workflow](#event-driven-workflow) for how agents are orchestrated
-- See [Data Storage Architecture](#data-storage-architecture) for where agent results are stored
-- See [API Layer & Authentication](#api-layer--authentication) for how reviews are triggered
 
 ```mermaid
 graph TB
@@ -222,34 +216,9 @@ graph TB
     class SERPAPI external
 ```
 
-**Key Components:**
-- **LLM Auditor (Nova Pro)**: Detects AI-generated content patterns, clichés, and template scaffolding with sophisticated reasoning
-- **Brand Auditor (Nova Lite)**: Analyzes voice consistency against learned writing patterns and provided brand guidelines
-- **Fact Checker (Nova Pro)**: Verifies claims through web research using complex multi-source analysis
-- **Readability Agent (Nova Lite)**: Improves grammar and clarity using established readability metrics
-- **Summary Agent (Nova Pro)**: Synthesizes all audit results into actionable 3-sentence summaries
-- **Bedrock AgentCore**: Provides persistent memory across sessions with user preference and semantic strategies
-- **Agent Tools**: Specialized functions for audit storage, suggestion creation, and web search integration
-
-**Notable Patterns:**
-- **Nova Model Selection**: Pro models handle complex reasoning (AI detection, fact-checking, synthesis), Lite models handle focused analysis (brand voice, readability)
-- **Memory Persistence**: AgentCore maintains conversation history and learns writing patterns over time through two memory strategies
-- **Tool Specialization**: Each agent has access to specific tools aligned with their analysis domain
-- **Parallel Execution**: All agents run simultaneously through Step Functions orchestration for faster results
-- **Multi-tenant Memory**: Memory namespaces isolate learning between different users while maintaining shared agent capabilities
-
-**What's Not Shown Here:**
-This diagram focuses on the AI layer and intentionally omits the API triggers, frontend interactions, and detailed data storage patterns. For the complete request flow, see the [Event-Driven Workflow](#event-driven-workflow) and [Complete System Diagram](#complete-system-diagram-reference).
-
 ### API Layer & Authentication
 
 **Focus:** API Gateway, Lambda functions, JWT validation, and Cognito integration
-**Use Case:** Understanding request lifecycle, security model, and CRUD operations for developers working on API endpoints
-**Related Sections:**
-- See [High-Level System Architecture](#high-level-system-architecture) for how this fits into the overall system
-- See [Event-Driven Workflow](#event-driven-workflow) for async processing triggered by API calls
-- See [Data Storage Architecture](#data-storage-architecture) for how API functions interact with storage
-- See [AI Agents & Nova Models](#ai-agents--nova-models) for what happens during content analysis
 
 ```mermaid
 graph TB
@@ -376,42 +345,15 @@ graph TB
     class CLIENT client
 ```
 
-**Key Components:**
-- **API Gateway**: Single entry point for all REST API requests with built-in CORS and throttling
-- **Lambda Authorizer**: Validates JWT tokens and extracts tenant context for multi-tenant security
-- **Cognito User Pool**: Manages user registration, authentication, and JWT token generation
-- **Post Confirmation Trigger**: Automatically generates unique tenant ID for new users
-- **Pre Token Generation**: Injects tenant ID as custom claim into JWT tokens
-- **Content Management API**: Full CRUD operations for blog posts with tenant isolation
-- **Suggestions API**: Manages AI-generated suggestions and review workflow triggers
-- **Profile Management API**: User profile and statistics with personalized insights
-
-**Notable Patterns:**
-- **JWT-based Security**: All API requests require valid JWT tokens with tenant context
-- **Multi-tenant Isolation**: Tenant ID extracted from JWT ensures data segregation
-- **RESTful Design**: Clean REST endpoints following standard HTTP methods and status codes
-- **Async Processing**: Review triggers initiate background workflows without blocking API responses
-- **Composite Keys**: DynamoDB uses tenant-scoped keys for efficient querying and isolation
-- **Cognito Triggers**: Automated tenant provisioning and token customization for seamless onboarding
-
-**What's Not Shown Here:**
-This diagram focuses on the API and authentication layer. It doesn't show the AI agents, Step Functions workflows, or detailed data schemas. For those details, see [AI Agents & Nova Models](#ai-agents--nova-models) and [Event-Driven Workflow](#event-driven-workflow).
-
 ### Event-Driven Workflow
 
 **Focus:** EventBridge, Step Functions, and agent orchestration for async content analysis
-**Use Case:** Understanding workflow coordination, parallel processing, and notification patterns for developers working on async processing
-**Related Sections:**
-- See [AI Agents & Nova Models](#ai-agents--nova-models) for details about what each agent does during execution
-- See [API Layer & Authentication](#api-layer--authentication) for how workflows are triggered
-- See [Data Storage Architecture](#data-storage-architecture) for where workflow results are stored
-- See [High-Level System Architecture](#high-level-system-architecture) for overall system context
 
 ```mermaid
 graph TB
     %% API Trigger Layer
     subgraph "🚀 Review Initiation"
-        STARTREVIEW[Start Review API<br/>POST /posts/{id}/reviews]
+        STARTREVIEW["Start Review API<br/>POST /posts/{id}/reviews"]
         VALIDATE[Content Validation<br/>Check post exists & status]
     end
 
@@ -447,20 +389,20 @@ graph TB
     end
 
     %% Notification Layer
-    subgraph "🔔 Real-time Notifications"
+    subgraph "Real-time Notifications"
         MOMENTO[Momento Topics<br/>WebSocket Alternative]
         APIDEST[EventBridge API Destination<br/>HTTP Integration]
         FRONTEND[Frontend Subscription<br/>Real-time Updates]
     end
 
     %% Data Storage
-    subgraph "💾 Workflow Data Storage"
+    subgraph "Workflow Data Storage"
         WORKFLOWDB[(DynamoDB<br/>Analysis Status & Results)]
         MOMENTOTOKEN[Momento Auth Token<br/>Disposable Subscription]
     end
 
     %% External Integration
-    subgraph "🌐 External Services"
+    subgraph "External Services"
         SERPAPI[SerpAPI<br/>Fact-checking Web Search]
     end
 
@@ -532,36 +474,9 @@ graph TB
     class SERPAPI external
 ```
 
-**Key Components:**
-- **Start Review API**: Validates content readiness and publishes EventBridge event to trigger analysis workflow
-- **EventBridge Orchestration**: Routes events between API triggers, Step Functions, and notification systems
-- **Step Functions State Machine**: Manages parallel agent execution with idempotency, error handling, and status tracking
-- **Parallel Agent Processing**: Four specialized agents run simultaneously for faster analysis completion
-- **Post-Processing Pipeline**: Validates suggestions against content changes and handles published content status
-- **Momento Topics Integration**: Provides real-time notifications to frontend via EventBridge API Destinations
-- **Idempotency Management**: Prevents duplicate analysis runs using DynamoDB conditional writes with TTL
-
-**Notable Patterns:**
-- **Event-Driven Architecture**: API functions trigger async workflows without blocking user interactions
-- **Parallel Processing**: All agents execute simultaneously through Step Functions parallel branches for optimal performance
-- **Idempotency Protection**: Workflow prevents duplicate executions using composite keys and conditional DynamoDB writes
-- **Real-time Notifications**: EventBridge API Destinations push completion events to Momento Topics for instant frontend updates
-- **Error Resilience**: Step Functions includes retry logic and error handling with automatic status updates
-- **Async Post-Processing**: Content changes trigger suggestion validation and status management independently
-- **Disposable Authentication**: Momento tokens provide secure, time-limited access for real-time subscriptions
-
-**What's Not Shown Here:**
-This diagram focuses on workflow orchestration and event flow. It doesn't show the detailed agent implementations, API endpoint specifics, or data storage schemas. For agent internals, see [AI Agents & Nova Models](#ai-agents--nova-models). For data patterns, see [Data Storage Architecture](#data-storage-architecture).
-
 ### High-Level System Architecture
 
 **Focus:** Major architectural layers and data flow between core system components
-**Use Case:** Getting oriented with the overall system design and understanding how the major pieces fit together
-**Related Sections:**
-- See [AI Agents & Nova Models](#ai-agents--nova-models) for detailed agent architecture
-- See [API Layer & Authentication](#api-layer--authentication) for request lifecycle details
-- See [Event-Driven Workflow](#event-driven-workflow) for async processing patterns
-- See [Complete System Diagram](#complete-system-diagram-reference) for comprehensive view
 
 ```mermaid
 graph TB
@@ -625,42 +540,9 @@ graph TB
     class EXTERNAL external
 ```
 
-**Key Components:**
-- **Frontend Layer**: React-based blog editor with Cognito authentication providing a clean writing interface
-- **API Gateway Layer**: REST API with Lambda functions handling all CRUD operations and review triggers
-- **AI Agent Layer**: Five specialized Nova-powered agents with persistent memory for personalized content analysis
-- **Event-Driven Workflow**: EventBridge and Step Functions orchestrating parallel agent execution
-- **Data Storage Layer**: DynamoDB for structured data and S3 for content storage with multi-tenant isolation
-- **External Integrations**: Web search for fact-checking and real-time notifications for user feedback
-
-**Notable Patterns:**
-- **Event-driven architecture**: API functions trigger async workflows without blocking user interactions
-- **Multi-agent specialization**: Each agent focuses on a specific aspect (AI detection, brand voice, facts, grammar, summary)
-- **Persistent memory**: Agents learn and improve their analysis based on user feedback over time
-- **Parallel processing**: All agents run simultaneously for faster analysis results
-
-**What's Not Shown Here:**
-This high-level view intentionally omits implementation details like specific Lambda functions, agent tools, memory strategies, and detailed data flows. For those details, see the focused diagrams below.
-
-### Data Storage Architecture
-
-**Focus:** DynamoDB, S3, and data access patterns with multi-tenant isolation
-**Use Case:** Understanding storage design, data models, and access patterns for developers working on data layer
-**Related Sections:**
-- See [API Layer & Authentication](#api-layer--authentication) for how data is accessed through APIs
-- See [AI Agents & Nova Models](#ai-agents--nova-models) for how agents store their analysis results
-- See [Event-Driven Workflow](#event-driven-workflow) for workflow data management
-- See [High-Level System Architecture](#high-level-system-architecture) for overall data flow context
-
-*Note: This diagram is planned for implementation in task 5 of the architecture breakdown spec.*
-
 ### Complete System Diagram (Reference)
 
 **Focus:** Complete system view with all components and connections
-**Use Case:** Reference diagram for developers who need to see the full system complexity and all interactions
-**Related Sections:** This diagram combines all the focused views above - use the individual diagrams for specific architectural concerns
-
-For developers who need to see all the detailed connections and components, here's the comprehensive architecture diagram:
 
 ```mermaid
 graph TB

@@ -221,11 +221,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ className = '', editorCont
                     onClick={() => navigate(item.path)}
                     aria-label={item.ariaLabel}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center space-x-2 px-2 lg:px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 min-h-touch min-w-touch ${
-                      isActive
-                        ? 'text-primary bg-blue-50 border-b-2 border-primary'
-                        : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-                    }`}
+                    className={`flex items-center space-x-2 px-2 lg:px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 min-h-touch min-w-touch ${isActive
+                      ? 'text-primary bg-blue-50 border-b-2 border-primary'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
                   >
                     {item.icon}
                     <span className="hidden lg:inline">{item.label}</span>
@@ -247,7 +246,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ className = '', editorCont
                       </svg>
                     )}
                     <span
-                      className="text-gray-900 font-medium truncate max-w-32"
+                      className="text-gray-900 font-medium truncate max-w-64"
                       aria-current="page"
                     >
                       {crumb}
@@ -367,11 +366,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ className = '', editorCont
                   onClick={() => navigate(item.path)}
                   aria-label={item.ariaLabel}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 whitespace-nowrap min-h-touch ${
-                    isActive
-                      ? 'text-primary bg-blue-50'
-                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 whitespace-nowrap min-h-touch ${isActive
+                    ? 'text-primary bg-blue-50'
+                    : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
                 >
                   {item.icon}
                   <span>{item.label}</span>

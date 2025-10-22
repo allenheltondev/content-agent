@@ -279,7 +279,14 @@ export function useSuggestionCache(config: SuggestionCacheConfig = {}) {
     content: string,
     resolvedSuggestions: string[] = []
   ): CachedSuggestionData => {
-    const contentHash = btoa(content).substring(0, 16); // Simple content hash
+    // Safe content hash that handles Unicode characters
+    let hash = 0;
+    for (let i = 0; i < Math.min(content.length, 100); i++) {
+      const char = content.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    const contentHash = Math.abs(hash).toString(36).substring(0, 16);
     const cacheKey = generateCacheKey('suggestionData', suggestions.length, contentHash, resolvedSuggestions.length);
 
     return getOrCompute(cacheKey, () => {

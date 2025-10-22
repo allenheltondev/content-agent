@@ -2,6 +2,7 @@ import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/clie
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { formatResponse } from '../utils/responses.mjs';
+import { incrementMinorVersion } from '../utils/versioning.mjs';
 
 const ddb = new DynamoDBClient();
 const eventBridge = new EventBridgeClient();
@@ -58,9 +59,10 @@ export const handler = async (event) => {
     }
 
     if (bodyChanged) {
-      updateExpressions.push('#version = #version + :one');
+      const newVersion = incrementMinorVersion(currentPost.version);
+      updateExpressions.push('#version = :newVersion');
       expressionAttributeNames['#version'] = 'version';
-      expressionAttributeValues[':one'] = { N: '1' };
+      expressionAttributeValues[':newVersion'] = { S: newVersion };
     }
 
     updateExpressions.push('#updatedAt = :updatedAt');

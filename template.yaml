@@ -369,6 +369,7 @@ Resources:
           - agents/readability.mjs
     Properties:
       Handler: agents/readability.handler
+      Timeout: 60
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: 2012-10-17
@@ -552,6 +553,7 @@ Resources:
             - Effect: Allow
               Action:
                 - dynamodb:PutItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt ContentTable.Arn
       Environment:
         Variables:
@@ -650,6 +652,7 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:DeleteItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt ContentTable.Arn
             - Effect: Allow
               Action:
@@ -717,6 +720,8 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:Query
+                - dynamodb:DeleteItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt ContentTable.Arn
       Environment:
         Variables:
@@ -746,6 +751,7 @@ Resources:
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
+                - dynamodb:UpdateItem
               Resource: !GetAtt ContentTable.Arn
             - Effect: Allow
               Action:
@@ -1077,7 +1083,7 @@ Resources:
               message: $.detail.success
               tenantId: $.detail.tenantId
               contentId: $.detail.contentId
-            InputTemplate: '"<message>"'
+            InputTemplate: '{"success": <message>}'
           HttpParameters:
             PathParameterValues:
               - !Ref MomentoCacheName

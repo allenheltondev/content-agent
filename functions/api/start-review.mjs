@@ -1,8 +1,9 @@
-import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { AuthClient, CredentialProvider, ExpiresIn, TopicRole } from '@gomomento/sdk';
 import { formatResponse } from '../utils/responses.mjs';
+import { incrementMajorVersion } from '../utils/versioning.mjs';
 
 const ddb = new DynamoDBClient();
 const eventBridge = new EventBridgeClient();
@@ -32,6 +33,26 @@ export const handler = async (event) => {
     }
 
     const post = unmarshall(getResponse.Item);
+
+    // Increment major version when starting a review
+    const newVersion = incrementMajorVersion(post.version);
+
+    // Update the post with the new major version
+    const updateResponse = await ddb.send(new UpdateItemCommand({
+      TableName: process.env.TABLE_NAME,
+      Key: marshall({
+        pk: `${tenantId}#${postId}`,
+        sk: 'content'
+      }),
+      UpdateExpression: 'SET version = :newVersion, updatedAt = :updatedAt',
+      ExpressionAttributeValues: marshall({
+        ':newVersion': newVersion,
+        ':updatedAt': Date.now()
+      }),
+      ReturnValues: 'ALL_NEW'
+    }));
+
+    const updatedPost = unmarshall(updateResponse.Attributes);
     const topicName = `${tenantId}_${postId}`;
     let momentoToken;
 
@@ -56,7 +77,7 @@ export const handler = async (event) => {
       const eventDetail = {
         tenantId,
         contentId: postId,
-        version: post.version
+        version: updatedPost.version
       };
 
       await eventBridge.send(new PutEventsCommand({

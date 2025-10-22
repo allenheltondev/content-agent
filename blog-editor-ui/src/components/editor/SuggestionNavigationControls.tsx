@@ -56,6 +56,18 @@ export const SuggestionNavigationControls: React.FC<SuggestionNavigationControls
           onNavigate('next');
         }
         break;
+      case 'j': // Vim-style navigation
+        event.preventDefault();
+        if (hasNext) {
+          onNavigate('next');
+        }
+        break;
+      case 'k': // Vim-style navigation
+        event.preventDefault();
+        if (hasPrevious) {
+          onNavigate('previous');
+        }
+        break;
       default:
         break;
     }
@@ -150,6 +162,13 @@ export const SuggestionNavigationControls: React.FC<SuggestionNavigationControls
             </kbd>
             <kbd className="px-1.5 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 rounded">
               →
+            </kbd>
+            <span className="mx-1">or</span>
+            <kbd className="px-1.5 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 rounded">
+              j
+            </kbd>
+            <kbd className="px-1.5 py-0.5 text-xs font-mono bg-gray-100 border border-gray-300 rounded">
+              k
             </kbd>
             <span className="ml-1">to navigate</span>
           </span>

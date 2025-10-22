@@ -1,24 +1,23 @@
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import type { BlogPost, Suggestion } from '../types';
+import type { BlogPost, Suggestion, SuggestionType } from '../types';
 import { apiService } from '../services/ApiService';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useAutoSaveManager } from '../hooks/useAutoSaveManager';
 // Local draft persistence disabled
-import { useSuggestionManager } from '../hooks/useSuggestionManager';
+
 import { usePageTitle } from '../hooks/usePageTitle';
 import { EditorHeader } from '../components/editor/EditorHeader';
 import { TitleEditor } from '../components/editor/TitleEditor';
-import { ContentEditorWithSuggestions } from '../components/editor/ContentEditorWithSuggestions';
 import { EditorActions } from '../components/editor/EditorActions';
-import { ContentSummary } from '../components/editor/ContentSummary';
-import { MainEditorLayout } from '../components/editor/MainEditorLayout';
+
 import { UndoNotification } from '../components/editor/UndoNotification';
 import { EditorSkeleton } from '../components/editor/EditorSkeleton';
 import { ConfirmationModal } from '../components/common/ConfirmationModal';
 import { AppHeader } from '../components/common';
 import { ConflictResolutionModal } from '../components/editor/ConflictResolutionModal';
+import { SimpleSuggestionHighlights } from '../components/editor/SimpleSuggestionHighlights';
 
 import { useAsyncReview } from '../hooks/useAsyncReview';
 import { applyResolution, type ConflictData, type ConflictResolution } from '../utils/conflictResolution';
@@ -27,10 +26,15 @@ import { EditorFallbackUI } from '../components/editor/EditorFallbackUI';
 import { ErrorReportingManager } from '../utils/errorReporting';
 import { EditorBackupManager } from '../utils/editorBackup';
 import { useRenderPerformanceMonitor } from '../hooks/useRenderPerformanceMonitor';
-import { EditorModeProvider, useEditorMode } from '../contexts/EditorModeContext';
-import { ModeToggleButton } from '../components/editor/ModeToggleButton';
-import { SkipLinks } from '../components/accessibility/SkipLinks';
-import { AccessibilitySettings } from '../components/accessibility/AccessibilitySettings';
+import { ReviewProgressNotification } from '../components/editor/ReviewProgressNotification';
+import { useReviewProgress } from '../hooks/useReviewProgress';
+import { useSuggestionNavigation } from '../hooks/useSuggestionNavigation';
+import { SuggestionStats } from '../components/editor/SuggestionStats';
+import { DraggableActiveSuggestionArea } from '../components/editor/DraggableActiveSuggestionArea';
+import { applySuggestionWithOffsetRecalculation } from '../utils/suggestionOffsetCalculation';
+
+
+
 
 
 // Inner component that uses the EditorModeProvider context
@@ -40,17 +44,13 @@ const EditorPageContent = memo(() => {
   const { showError, showSuccess } = useToast();
   const { isLoading: isAuthLoading, isInitialized, isAuthenticated } = useAuth();
 
-  // Editor mode context
-  const {
-    currentMode,
-    markContentChanged,
-    switchToEditMode,
-    switchToReviewMode,
-    isTransitioning,
-  } = useEditorMode();
+  // Simple mode state - no complex context
+  const [currentMode, setCurrentMode] = useState<'edit' | 'review'>('edit');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [hasInitiallyLoadedSuggestions, setHasInitiallyLoadedSuggestions] = useState(false);
 
-  // Check if this is a new post - memoize to prevent re-calculations
-  const isNewPost = useMemo(() => id === 'new', [id]);
+  // All posts are existing posts now - new posts are created via modal
+  const isNewPost = false;
 
   // Integration testing and monitoring
   useEffect(() => {
@@ -106,7 +106,7 @@ const EditorPageContent = memo(() => {
   const [title, setTitle] = useState('');
 
   // Set page title based on post state
-  usePageTitle(isNewPost ? 'New Post' : (title.trim() || 'Editor'));
+  usePageTitle(title.trim() || 'Editor');
   const [isLoading, setIsLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
   // const [hasDraftToRecover, setHasDraftToRecover] = useState(false);
@@ -114,7 +114,6 @@ const EditorPageContent = memo(() => {
   const [conflictData, setConflictData] = useState<ConflictData | null>(null);
   const [, setInitialLoadTimestamp] = useState<number>(0);
   const [showUndoNotification, setShowUndoNotification] = useState(false);
-  const [isCreatingPost, setIsCreatingPost] = useState(false);
 
   // Workflow confirmation modals
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
@@ -125,8 +124,7 @@ const EditorPageContent = memo(() => {
   // Navigation confirmation modal
   const [showNavigationConfirmation, setShowNavigationConfirmation] = useState(false);
 
-  // Accessibility settings modal
-  const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false);
+
 
   // Auto-save hook with enhanced post ID handling and retry logic
   const {
@@ -137,21 +135,19 @@ const EditorPageContent = memo(() => {
     forceSave,
     clearError: clearSaveError
   } = useAutoSaveManager({
-    postId: isNewPost ? null : (id || null),
+    postId: id || null,
     title,
     content,
     onSaveSuccess: (savedPost) => {
       setPost(savedPost);
       setIsDirty(false);
+      // Don't update title/content here - let the user's current edits remain
+      // The saved post reflects what was saved, but user might have continued typing
     },
     onSaveError: (error) => {
       showError(`Auto-save failed: ${error}`);
     },
-    onPostCreated: (newPostId) => {
-      // Navigate to the new post's editor page when created
-      navigate(`/editor/${newPostId}`, { replace: true });
-    },
-    enabled: true // Always enabled, hook handles new post logic internally
+    enabled: true
   });
 
   // Draft persistence removed
@@ -159,21 +155,11 @@ const EditorPageContent = memo(() => {
 
 
   // Handle content changes - memoized to prevent unnecessary re-renders
+  // Simplified content change handler - no complex interactions
   const handleContentChange = useCallback((newContent: string) => {
-    const oldContent = content;
     setContent(newContent);
     setIsDirty(true);
-
-    // Track content changes for mode toggle functionality
-    if (currentMode === 'edit') {
-      markContentChanged();
-      // Also track the actual content diff for suggestion recalculation
-      if (oldContent !== newContent) {
-        // The context will handle the diff calculation
-        markContentChanged();
-      }
-    }
-  }, [content, currentMode, markContentChanged]);
+  }, []);
 
   // Handle title changes - memoized to prevent unnecessary re-renders
   const handleTitleChange = useCallback((newTitle: string) => {
@@ -181,41 +167,279 @@ const EditorPageContent = memo(() => {
     setIsDirty(true);
   }, []);
 
-  // Suggestion management hook - disabled for new posts
-  // Memoize the config to prevent unnecessary re-renders
-  const suggestionConfig = useMemo(() => ({
-    postId: isNewPost ? '' : (id || ''),
-    maxUndoHistory: 10,
-    persistState: true,
-    autoSaveOnAccept: true,
-    onSuccess: (_action: string, _suggestionId: string) => {},
-    onError: (error: string, _action: string, _suggestionId: string) => {
-      showError(error);
+
+
+  // Simple suggestion state - no complex manager
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [_expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
+
+  // Simple undo functionality
+  const [undoHistory, setUndoHistory] = useState<any[]>([]);
+
+  // Suggestion navigation hook
+  const suggestionNavigation = useSuggestionNavigation(suggestions, {
+    autoAdvance: true,
+    loopNavigation: false,
+    onSuggestionChange: (suggestion, _index) => {
+      // Update expanded suggestion when navigation changes
+      setExpandedSuggestion(suggestion?.id || null);
     }
-  }), [id, isNewPost, showSuccess, showError]);
+  });
 
-  const {
-    suggestions,
-    summary,
-    error: suggestionsError,
-    undoHistory,
-    loadSuggestions,
-    acceptSuggestion,
-    rejectSuggestion,
-    undoLastAcceptance,
-    clearError: clearSuggestionsError,
-    hasActiveSuggestions
-  } = useSuggestionManager(content, handleContentChange, suggestionConfig);
 
-  // Update parent component's suggestions state when they change
-  useEffect(() => {
-    // This will be handled by a callback from parent
-    // For now, we'll use a custom event to communicate with parent
-    const event = new CustomEvent('suggestionsUpdated', {
-      detail: { suggestions, content }
-    });
-    window.dispatchEvent(event);
+
+  // Calculate suggestion stats
+  const suggestionStats = useMemo(() => {
+    // Safety check: ensure suggestions is an array
+    const safeSuggestions = Array.isArray(suggestions) ? suggestions : [];
+
+    const byType = safeSuggestions.reduce((acc, suggestion) => {
+      acc[suggestion.type] = (acc[suggestion.type] || 0) + 1;
+      return acc;
+    }, {} as Record<SuggestionType, number>);
+
+    return {
+      total: safeSuggestions.length,
+      accepted: 0, // These would be tracked if we had accepted/rejected history
+      rejected: 0,
+      canUndo: undoHistory.length > 0,
+      byType
+    };
+  }, [suggestions, undoHistory.length]);
+
+  // Simple suggestion functions
+  const loadSuggestions = useCallback(async () => {
+    if (!post?.id) return;
+
+    try {
+      setIsLoadingSuggestions(true);
+      const response = await apiService.getSuggestions(post.id);
+      console.log('loadSuggestions function - API returned:', response);
+
+      // Extract suggestions array from response object
+      const loadedSuggestions = response?.suggestions || response || [];
+      console.log('loadSuggestions function - Extracted suggestions:', loadedSuggestions);
+      console.log('loadSuggestions function - Is array?', Array.isArray(loadedSuggestions));
+
+      // Safety check: ensure we always set an array
+      const safeSuggestions = Array.isArray(loadedSuggestions) ? loadedSuggestions : [];
+      setSuggestions(safeSuggestions);
+
+      // Automatically validate positions after initial loading (immediate)
+      if (safeSuggestions.length > 0 && !hasInitiallyLoadedSuggestions) {
+        // Run immediately without delay
+        refreshSuggestionPositions();
+        setHasInitiallyLoadedSuggestions(true);
+      }
+
+      return safeSuggestions;
+    } catch (error) {
+      console.error('Failed to load suggestions:', error);
+      setSuggestionsError('Failed to load suggestions');
+      setSuggestions([]);
+      return [];
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  }, [post?.id]);
+
+  // Validate and refresh suggestion positions (completely silent)
+  const refreshSuggestionPositions = useCallback(async () => {
+    if (suggestions.length === 0) return;
+
+    try {
+      const { validateSuggestionOffsets } = await import('../utils/suggestionOffsetCalculation');
+      const validatedSuggestions = validateSuggestionOffsets(suggestions, content);
+
+      if (validatedSuggestions.length !== suggestions.length) {
+        console.log(`Silently refreshed suggestion positions: ${suggestions.length} -> ${validatedSuggestions.length}`);
+        setSuggestions(validatedSuggestions);
+      } else {
+        // Check if any suggestions were corrected (same count but different positions)
+        const hasChanges = suggestions.some((original, index) => {
+          const validated = validatedSuggestions[index];
+          return validated && (
+            validated.startOffset !== original.startOffset ||
+            validated.endOffset !== original.endOffset ||
+            validated.textToReplace !== original.textToReplace
+          );
+        });
+
+        if (hasChanges) {
+          console.log('Silently updated suggestion positions with corrections');
+          setSuggestions(validatedSuggestions);
+        }
+      }
+    } catch (error) {
+      console.error('Error during silent position validation:', error);
+      // Fail silently - don't show any error to user
+    }
   }, [suggestions, content]);
+
+  // Silently validate positions whenever suggestions or content changes
+  useEffect(() => {
+    if (suggestions.length > 0 && content && currentMode === 'review') {
+      // Small delay to ensure content is stable
+      const timeoutId = setTimeout(() => {
+        refreshSuggestionPositions();
+      }, 50);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [suggestions.length, content.length, currentMode, refreshSuggestionPositions]);
+
+  const acceptSuggestion = useCallback(async (suggestionId: string) => {
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    if (!suggestion || !post?.id) return;
+
+    try {
+      // Store original content for undo
+      const originalContent = content;
+
+      // Get remaining suggestions (excluding the one being accepted)
+      const remainingSuggestions = suggestions.filter(s => s.id !== suggestionId);
+
+      // Apply suggestion and recalculate offsets for remaining suggestions
+      const { newContent, updatedSuggestions } = applySuggestionWithOffsetRecalculation(
+        content,
+        suggestion,
+        remainingSuggestions
+      );
+
+      // Update content
+      handleContentChange(newContent);
+
+      // Update suggestions with recalculated offsets
+      setSuggestions(updatedSuggestions);
+
+      // Add to undo history
+      const undoAction = {
+        id: `undo-${Date.now()}`,
+        suggestionId,
+        originalContent,
+        newContent,
+        suggestion,
+        timestamp: Date.now()
+      };
+      setUndoHistory(prev => [undoAction, ...prev.slice(0, 9)]); // Keep max 10 items
+
+      // Handle auto-advance navigation
+      suggestionNavigation.handleSuggestionResolved(suggestionId);
+
+      // Update suggestion status to 'accepted' in backend
+      await apiService.updateSuggestionStatus(post.id, suggestionId, 'accepted');
+
+      // Automatically validate remaining suggestion positions immediately
+      if (updatedSuggestions.length > 0) {
+        // Use requestAnimationFrame to ensure DOM is updated first
+        requestAnimationFrame(() => {
+          refreshSuggestionPositions();
+        });
+      }
+
+      console.log(`Applied suggestion ${suggestionId}:`, {
+        originalSuggestionCount: suggestions.length,
+        updatedSuggestionCount: updatedSuggestions.length,
+        removedOverlapping: suggestions.length - updatedSuggestions.length - 1 // -1 for the accepted suggestion
+      });
+    } catch (error) {
+      console.error('Failed to accept suggestion:', error);
+      // Could show error toast here if needed
+    }
+  }, [suggestions, content, handleContentChange, post?.id, suggestionNavigation]);
+
+  const rejectSuggestion = useCallback(async (suggestionId: string) => {
+    if (!post?.id) return;
+
+    try {
+      // Remove suggestion from list
+      setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+
+      // Handle auto-advance navigation
+      suggestionNavigation.handleSuggestionResolved(suggestionId);
+
+      // Update suggestion status to 'rejected' in backend
+      await apiService.updateSuggestionStatus(post.id, suggestionId, 'rejected');
+    } catch (error) {
+      console.error('Failed to reject suggestion:', error);
+      // Could show error toast here if needed
+    }
+  }, [post?.id, suggestionNavigation]);
+
+
+
+  const undoLastAcceptance = useCallback(() => {
+    if (undoHistory.length === 0) return;
+
+    const lastAction = undoHistory[0];
+
+    // Restore the original content
+    handleContentChange(lastAction.originalContent);
+
+    // Restore the suggestion that was accepted
+    const restoredSuggestion = lastAction.suggestion;
+    setSuggestions(prev => {
+      // Add the suggestion back and sort by startOffset to maintain order
+      const updatedSuggestions = [...prev, restoredSuggestion].sort(
+        (a, b) => a.startOffset - b.startOffset
+      );
+      return updatedSuggestions;
+    });
+
+    // Remove from undo history
+    setUndoHistory(prev => prev.slice(1));
+
+    // Validate positions after undo since content changed
+    requestAnimationFrame(() => {
+      refreshSuggestionPositions();
+    });
+
+    console.log(`Undid suggestion ${lastAction.suggestionId}, restored suggestion to list`);
+  }, [undoHistory, handleContentChange]);
+
+
+
+  // Simple mode toggle functions
+  const switchToEditMode = useCallback(async () => {
+    setIsTransitioning(true);
+    setCurrentMode('edit');
+    setTimeout(() => setIsTransitioning(false), 300);
+  }, []);
+
+  const switchToReviewMode = useCallback(async () => {
+    setIsTransitioning(true);
+    setCurrentMode('review');
+
+    // Immediately validate suggestion positions when entering review mode
+    // Do this silently without any visual indicators
+    if (suggestions.length > 0) {
+      // Import and run validation immediately, no delays
+      const { validateSuggestionOffsets } = await import('../utils/suggestionOffsetCalculation');
+      const validatedSuggestions = validateSuggestionOffsets(suggestions, content);
+
+      // Update suggestions silently if needed
+      if (validatedSuggestions.length !== suggestions.length ||
+          suggestions.some((original, index) => {
+            const validated = validatedSuggestions[index];
+            return validated && (
+              validated.startOffset !== original.startOffset ||
+              validated.endOffset !== original.endOffset ||
+              validated.textToReplace !== original.textToReplace
+            );
+          })) {
+        setSuggestions(validatedSuggestions);
+        console.log('Silently corrected suggestion positions on review mode entry');
+      }
+    }
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+    }, 300);
+  }, [suggestions, content]);
+
+
 
   // Review hook - for real-time AI analysis
   const {
@@ -228,24 +452,30 @@ const EditorPageContent = memo(() => {
       // Refresh suggestions when review completes
       if (!isNewPost && post) {
         loadSuggestions();
-        // Suppress success toast
       }
+      // Reset progress notification when review completes
+      resetProgress();
     },
     onReviewError: (error) => {
       showError(`Review failed: ${error}`);
+      // Reset progress notification on error
+      resetProgress();
     }
   });
 
+  // Progress notification management
+  const { isDismissed, dismissProgress, resetProgress } = useReviewProgress();
+
   // Combined saving state - memoized to prevent re-renders
-  const isSaving = useMemo(() => isAutoSaving || isCreatingPost, [isAutoSaving, isCreatingPost]);
+  const isSaving = useMemo(() => isAutoSaving, [isAutoSaving]);
 
   // Track if suggestions are loading to prevent UI jumping
-  const [areSuggestionsLoading, setAreSuggestionsLoading] = useState(false);
+  const [_areSuggestionsLoading, _setAreSuggestionsLoading] = useState(false);
 
-  // Combined loading state that includes suggestions loading
+  // Only show skeleton for initial page load
   const isFullyLoading = useMemo(() => {
-    return isLoading || areSuggestionsLoading;
-  }, [isLoading, areSuggestionsLoading]);
+    return isLoading && !post;
+  }, [isLoading, post]);
 
   // Load post data on mount
   useEffect(() => {
@@ -265,39 +495,10 @@ const EditorPageContent = memo(() => {
         return;
       }
 
-      // Handle new post creation
-      if (isNewPost) {
-        try {
-          setIsLoading(true);
+      // Reset the initial suggestions flag when loading a new post
+      setHasInitiallyLoadedSuggestions(false);
 
-          // Initialize empty new post - recovery will be handled by the hook
-          setTitle('');
-          setContent('');
-
-          // Create a temporary post object for new posts
-          const tempPost: BlogPost = {
-            id: 'new',
-            title: '',
-            body: '',
-            status: 'draft',
-            version: 1,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            authorId: 'current-user' // This will be set by the backend
-          };
-          setPost(tempPost);
-          setInitialLoadTimestamp(Date.now());
-        } catch (error) {
-          console.error('Failed to initialize new post:', error);
-          showError('Failed to initialize new post');
-          navigate('/dashboard');
-        } finally {
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      // Handle existing post loading
+      // Load existing post
       try {
         setIsLoading(true);
         const loadedPost = await apiService.getPost(id);
@@ -308,14 +509,29 @@ const EditorPageContent = memo(() => {
         setTitle(loadedPost.title);
         setContent(loadedPost.body);
 
-        // Load suggestions for existing posts and track loading state
-        if (loadedPost.status === 'draft' || loadedPost.status === 'review') {
-          setAreSuggestionsLoading(true);
-          try {
-            await loadSuggestions();
-          } finally {
-            setAreSuggestionsLoading(false);
-          }
+        // Always try to load suggestions for existing posts
+        console.log('Loading suggestions for post:', loadedPost.id, 'status:', loadedPost.status);
+        setIsLoadingSuggestions(true);
+        try {
+          const response = await apiService.getSuggestions(loadedPost.id);
+          console.log('Post loading - API returned:', response);
+
+          // Extract suggestions array from response object
+          const loadedSuggestions = response?.suggestions || response || [];
+          console.log('Post loading - Extracted suggestions:', loadedSuggestions);
+          console.log('Post loading - Is array?', Array.isArray(loadedSuggestions));
+
+          // Safety check: ensure we always set an array
+          const safeSuggestions = Array.isArray(loadedSuggestions) ? loadedSuggestions : [];
+          console.log('Post loading - Setting safe suggestions:', safeSuggestions);
+          setSuggestions(safeSuggestions);
+          console.log('Post loading - Suggestions state set');
+        } catch (error) {
+          console.error('Failed to load suggestions:', error);
+          setSuggestionsError('Failed to load suggestions');
+          setSuggestions([]); // Ensure it's an empty array on error
+        } finally {
+          setIsLoadingSuggestions(false);
         }
       } catch (error) {
         console.error('Failed to load post:', error);
@@ -330,58 +546,11 @@ const EditorPageContent = memo(() => {
     };
 
     loadPost();
-  }, [id, navigate, showError, isNewPost, loadSuggestions, isAuthLoading, isInitialized, isAuthenticated]);
+  }, [id, navigate, showError, isAuthLoading, isInitialized, isAuthenticated]);
 
   // Manual save (force save)
   const handleSave = useCallback(async () => {
-    if (!post) return;
-
-    // Handle new post creation
-    if (isNewPost) {
-      if (!title.trim()) {
-        showError('Title is required to save a new post');
-        return;
-      }
-
-      if (!content.trim()) {
-        showError('Content is required to save a new post');
-        return;
-      }
-
-      if (title.trim().length < 3) {
-        showError('Title must be at least 3 characters long');
-        return;
-      }
-
-      if (content.trim().length < 10) {
-        showError('Content must be at least 10 characters long');
-        return;
-      }
-
-      try {
-        setIsCreatingPost(true);
-        const newPost = await apiService.createPost({
-          title: title.trim(),
-          body: content.trim()
-        });
-
-        setPost(newPost);
-        setIsDirty(false);
-        showSuccess('Post created successfully');
-
-        // Navigate to the new post's editor page
-        navigate(`/editor/${newPost.id}`, { replace: true });
-      } catch (error) {
-        console.error('Failed to create post:', error);
-        showError('Failed to create post');
-      } finally {
-        setIsCreatingPost(false);
-      }
-      return;
-    }
-
-    // Handle existing post save
-    if (!isDirty) return;
+    if (!post || !isDirty) return;
 
     try {
       await forceSave();
@@ -390,7 +559,7 @@ const EditorPageContent = memo(() => {
       console.error('Failed to save post:', error);
       showError('Failed to save post');
     }
-  }, [post, isDirty, isNewPost, title, content, forceSave, showSuccess, showError, navigate]);
+  }, [post, isDirty, forceSave, showSuccess, showError]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -403,8 +572,8 @@ const EditorPageContent = memo(() => {
         }
       }
 
-      // Ctrl/Cmd + M for mode toggle (only for existing posts)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'm' && !isNewPost && !isTransitioning) {
+      // Ctrl/Cmd + M for mode toggle
+      if ((e.ctrlKey || e.metaKey) && e.key === 'm' && !isTransitioning) {
         e.preventDefault();
         if (currentMode === 'edit') {
           switchToReviewMode();
@@ -412,13 +581,15 @@ const EditorPageContent = memo(() => {
           switchToEditMode();
         }
       }
+
+
     };
 
     // Event listener will be cleaned up by React
     document.addEventListener('keydown', handleKeyDown);
 
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isDirty, isSaving, handleSave, isNewPost, isTransitioning, currentMode, switchToEditMode, switchToReviewMode]);
+  }, [isDirty, isSaving, handleSave, isTransitioning, currentMode, switchToEditMode, switchToReviewMode]);
 
   // Clear save errors when user starts typing
   useEffect(() => {
@@ -427,48 +598,50 @@ const EditorPageContent = memo(() => {
     }
   }, [saveError, isDirty, content, title]);
 
+
+
+  // Auto-switch to review mode when suggestions are loaded (only on initial load)
+  useEffect(() => {
+    // Only auto-switch if we have suggestions, we're in edit mode, not loading, not transitioning,
+    // and this is the first time we're loading suggestions for this page session
+    const suggestionCount = Array.isArray(suggestions) ? suggestions.length : 0;
+    if (suggestionCount > 0 && currentMode === 'edit' && !isLoadingSuggestions && !isLoading && !isTransitioning && !hasInitiallyLoadedSuggestions) {
+      // Mark that we've initially loaded suggestions to prevent future auto-switches
+      setHasInitiallyLoadedSuggestions(true);
+
+      // Small delay to ensure suggestions are rendered and page is stable
+      const timer = setTimeout(() => {
+        switchToReviewMode();
+
+        // Scroll to suggestions area on mobile/tablet after mode switch
+        setTimeout(() => {
+          const suggestionsElement = document.querySelector('[data-suggestions-panel]');
+          if (suggestionsElement && window.innerWidth < 1280) { // xl breakpoint
+            suggestionsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 400); // Delay for mode switch animation
+      }, 300); // Longer delay for page load stability
+
+      return () => clearTimeout(timer);
+    }
+  }, [suggestions, currentMode, isLoadingSuggestions, isLoading, isTransitioning, hasInitiallyLoadedSuggestions, switchToReviewMode]);
+
   // Warn user about unsaved changes when leaving the page
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasUnsavedContent = isDirty || (isNewPost && (title.trim() || content.trim()));
-      if (hasUnsavedContent) {
+      if (isDirty) {
         e.preventDefault();
-        const message = isNewPost
-          ? 'You have an unsaved new post. Are you sure you want to leave?'
-          : 'You have unsaved changes. Are you sure you want to leave?';
+        const message = 'You have unsaved changes. Are you sure you want to leave?';
         e.returnValue = message;
         return message;
       }
     };
 
-    // Event listener will be cleaned up by React
     window.addEventListener('beforeunload', handleBeforeUnload);
-
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty, isNewPost, title, content]);
+  }, [isDirty]);
 
-  // Handle suggestion acceptance
-  const handleAcceptSuggestion = useCallback(async (suggestionId: string) => {
-    try {
-      await acceptSuggestion(suggestionId);
-      setShowUndoNotification(true);
-    } catch (error) {
-      console.error('Failed to accept suggestion:', error);
-      // Error handling is now done by the suggestion manager hook
-    }
-  }, [acceptSuggestion]);
 
-  // Handle suggestion rejection
-  const handleRejectSuggestion = useCallback(async (suggestionId: string) => {
-    try {
-      await rejectSuggestion(suggestionId);
-    } catch (error) {
-      console.error('Failed to reject suggestion:', error);
-      // Error handling is now done by the suggestion manager hook
-    }
-  }, [rejectSuggestion]);
-
-  // Suggestion deletion handled within suggestion manager when needed
 
   // Handle undo
   const handleUndo = useCallback(() => {
@@ -484,24 +657,24 @@ const EditorPageContent = memo(() => {
 
   // Handle back navigation with unsaved changes warning
   const handleNavigateBack = useCallback(() => {
-    if (isDirty || (isNewPost && (title.trim() || content.trim()))) {
+    if (isDirty) {
       setShowNavigationConfirmation(true);
     } else {
       navigate('/dashboard');
     }
-  }, [isDirty, isNewPost, title, content, navigate]);
+  }, [isDirty, navigate]);
 
   // Confirm navigation away from unsaved changes
   const handleNavigationConfirmed = useCallback(() => {
     setShowNavigationConfirmation(false);
     navigate('/dashboard');
-  }, [navigate, isNewPost]);
+  }, [navigate]);
 
   // Clear suggestions error when user dismisses
   useEffect(() => {
     if (suggestionsError) {
       const timer = setTimeout(() => {
-        clearSuggestionsError();
+        setSuggestionsError(null);
       }, 5000);
 
       // Timeout will be cleaned up by React
@@ -530,9 +703,7 @@ const EditorPageContent = memo(() => {
       return { isValid: false, error: 'No post loaded' };
     }
 
-    if (isNewPost) {
-      return { isValid: false, error: 'Please create and save your new post before submitting for review or finalizing' };
-    }
+
 
     if (!title.trim()) {
       return { isValid: false, error: 'Post title is required' };
@@ -627,10 +798,13 @@ const EditorPageContent = memo(() => {
         return;
       }
 
+      // Reset progress notification for new review
+      resetProgress();
+
       // Call the review endpoint and start polling
       await startReview(String(postIdToUse));
 
-      showSuccess('Review started! You\'ll receive real-time writing improvements.');
+      showSuccess('Review submitted! Analysis is starting - stay on this page to see suggestions as they arrive.');
       setShowSubmitConfirmation(false);
 
       // Don't navigate away - stay on the page to show real-time feedback
@@ -682,7 +856,7 @@ const EditorPageContent = memo(() => {
         {/* Professional App Header - always renders immediately */}
         <AppHeader
           editorContext={{
-            isNewPost,
+            isNewPost: false,
             postTitle: title.trim() || undefined,
             isDirty: false, // No changes during loading
             onNavigateBack: handleNavigateBack
@@ -690,7 +864,7 @@ const EditorPageContent = memo(() => {
         />
 
         {/* Editor Skeleton */}
-        <EditorSkeleton isNewPost={isNewPost} />
+        <EditorSkeleton isNewPost={false} />
       </div>
     );
   }
@@ -712,14 +886,13 @@ const EditorPageContent = memo(() => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Skip Links for Accessibility */}
-      <SkipLinks />
+    <div className="h-screen bg-gray-50 flex flex-col">
+
 
       {/* Professional App Header */}
       <AppHeader
         editorContext={{
-          isNewPost,
+          isNewPost: false,
           postTitle: title.trim() || undefined,
           isDirty,
           onNavigateBack: handleNavigateBack
@@ -764,96 +937,170 @@ const EditorPageContent = memo(() => {
         }
       >
         {/* Smooth transition container for editor content */}
-        <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
-        <div className="flex items-center justify-between">
-          <EditorHeader
-            isSaving={isSaving}
-            isDirty={isDirty}
-            lastSaved={lastSaved}
-            onSave={handleSave}
-            isNewPost={isNewPost}
-          />
+        <div className="max-w-7xl mx-auto animate-in fade-in duration-300 flex-1 flex flex-col">
+        {/* Header with inline mode toggle - full width white background */}
+        <div className="w-full bg-white border-b border-gray-200 shadow-sm">
+          <div className="px-3 sm:px-4 lg:px-6 xl:px-8 py-4">
+            <div className="flex items-center justify-between w-full">
+              {/* Left side - Editor Header */}
+              <EditorHeader
+                isSaving={isSaving}
+                isDirty={isDirty}
+                lastSaved={lastSaved}
+                onSave={handleSave}
+                isNewPost={false}
+              />
 
-          {/* Mode Toggle Button and Accessibility Settings - only show for existing posts */}
-          {!isNewPost && (
-            <div className="px-3 sm:px-4 lg:px-6 xl:px-8 flex items-center space-x-3">
-              <ModeToggleButton />
-
-              {/* Accessibility Settings Button */}
-              <button
-                onClick={() => setShowAccessibilitySettings(true)}
-                className="p-2 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md transition-colors"
-                aria-label="Open accessibility settings"
-                title="Accessibility settings"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
+              {/* Right side - Mode Toggle */}
+              <div className="flex items-center bg-gray-100 rounded-xl p-1.5 shadow-sm">
+                <button
+                  onClick={switchToEditMode}
+                  disabled={isTransitioning}
+                  className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
+                    currentMode === 'edit'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  ✏️ Edit
+                </button>
+                <button
+                  onClick={switchToReviewMode}
+                  disabled={isTransitioning}
+                  className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${
+                    currentMode === 'review'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  🔍 Review
+                </button>
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Notifications removed */}
 
 
-        <div className="px-3 sm:px-4 lg:px-6 xl:px-8 py-3 sm:py-4">
+        <div className="px-3 sm:px-4 lg:px-6 xl:px-8 py-3 sm:py-4 flex-1 flex flex-col">
 
 
-          {/* Content Summary - positioned above main content area */}
-          {!isNewPost && (
-            <ContentSummary
-              summary={summary}
-              isLoading={areSuggestionsLoading}
-              position="above-content"
-              prominence="medium"
-              className="mb-6"
-            />
-          )}
 
-          <MainEditorLayout
-            hasSuggestions={false}
-            sidebar={
-              <></>
-            }
-          >
+
+          <div className="flex-1">
             {/* Main editor area */}
-            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+            <div className="bg-white shadow-sm rounded-lg overflow-hidden h-full flex flex-col">
               {/* Title Editor */}
               <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-2">
                 <TitleEditor
                   title={title}
                   onChange={handleTitleChange}
-                  placeholder={isNewPost ? "Enter your title here" : "Enter your title here"}
+                  placeholder="Enter your title here"
                   maxLength={200}
                   disabled={isSaving}
                 />
               </div>
 
-              {/* Content Editor with Suggestions */}
-              <ContentEditorWithSuggestions
-                content={content}
-                suggestions={suggestions}
-                onChange={handleContentChange}
-                onAcceptSuggestion={handleAcceptSuggestion}
-                onRejectSuggestion={handleRejectSuggestion}
-                placeholder={isNewPost ? "Start writing your new blog post..." : "Start writing your blog post..."}
-                disabled={isSaving}
-                showSuggestions={!isNewPost && hasActiveSuggestions}
-                // Mode-aware props - explicitly pass from context
-                editorMode={currentMode}
-                isTransitioning={isTransitioning}
-                suggestionVersion={1} // Context will track this
-                onSuggestionRecalculation={async () => {
-                  // Trigger suggestion reload when switching to Review mode
-                  if (!isNewPost && post) {
-                    await loadSuggestions();
-                  }
-                }}
-              />
+              {/* Content Editor with Mode Support */}
+              <div className="px-4 sm:px-6 pb-4 sm:pb-6 relative flex-1 flex flex-col">
+                {/* Mode transition overlay */}
+                {isTransitioning && (
+                  <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
+                    <div className="flex items-center space-x-2 text-gray-600">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      <span className="text-sm font-medium">
+                        Switching to {currentMode === 'review' ? 'Review' : 'Edit'} mode...
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Content Editor */}
+                <div className="relative flex-1 flex flex-col">
+                  {currentMode === 'edit' ? (
+                    /* Edit Mode: Textarea */
+                    <textarea
+                      value={content}
+                      onChange={(e) => handleContentChange(e.target.value)}
+                      placeholder="Start writing your blog post..."
+                      disabled={isSaving || isTransitioning}
+                      className="w-full flex-1 p-4 text-gray-900 placeholder-gray-400 border-none outline-none focus:ring-0 resize-none font-mono text-sm leading-relaxed bg-transparent"
+                      style={{
+                        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
+                      }}
+                    />
+                  ) : (
+                    /* Review Mode: Layout with suggestions panel and highlighted text */
+                    <div className="w-full flex-1 flex flex-col lg:flex-row gap-4">
+                      {/* Left side: Suggestion stats and navigation */}
+                      <div className="lg:w-80 flex-shrink-0 space-y-4">
+                        {/* Suggestion Stats */}
+                        <SuggestionStats
+                          stats={suggestionStats}
+                          onUndoClick={undoHistory.length > 0 ? undoLastAcceptance : undefined}
+                        />
+
+
+                      </div>
+
+                      {/* Right side: Highlighted Text */}
+                      <div className="flex-1 p-4 bg-gray-50 overflow-auto rounded-lg">
+                        <SimpleSuggestionHighlights
+                          suggestions={suggestions}
+                          activeSuggestionId={suggestionNavigation.currentSuggestion?.id || null}
+                          content={content}
+                          onHighlightClick={(suggestionId) => {
+                            suggestionNavigation.navigateToSuggestion(suggestionId);
+                          }}
+                          onAccept={acceptSuggestion}
+                          onReject={rejectSuggestion}
+                          className="font-mono text-sm leading-relaxed"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Draggable Active Suggestion Area - appears in review mode */}
+                {currentMode === 'review' && suggestionNavigation.currentSuggestion && (
+                  <DraggableActiveSuggestionArea
+                    key="draggable-suggestion-area"
+                    activeSuggestion={suggestionNavigation.currentSuggestion}
+                    totalSuggestions={suggestionNavigation.totalCount}
+                    currentIndex={suggestionNavigation.currentIndex}
+                    onNavigate={suggestionNavigation.navigate}
+                    onAccept={acceptSuggestion}
+                    onReject={rejectSuggestion}
+                    onEdit={(suggestionId, newText) => {
+                      // Handle edit functionality if needed
+                      console.log('Edit suggestion:', suggestionId, newText);
+                    }}
+                    isProcessing={false}
+                    fullContent={content}
+                    onSuggestionResolved={suggestionNavigation.handleSuggestionResolved}
+                  />
+                )}
+
+                {/* Loading suggestions indicator */}
+                {isLoadingSuggestions && (
+                  <div className="mt-2 flex items-center text-sm text-gray-600">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
+                    Loading suggestions...
+                  </div>
+                )}
+
+
+
+                {/* Suggestions error */}
+                {suggestionsError && (
+                  <div className="mt-2 text-sm text-red-600">
+                    {suggestionsError}
+                  </div>
+                )}
+              </div>
             </div>
-          </MainEditorLayout>
+          </div>
         </div>
 
         <EditorActions
@@ -944,69 +1191,18 @@ const EditorPageContent = memo(() => {
         onCancel={() => setShowNavigationConfirmation(false)}
       />
 
-      {/* Accessibility Settings Modal */}
-      <AccessibilitySettings
-        isOpen={showAccessibilitySettings}
-        onClose={() => setShowAccessibilitySettings(false)}
+      {/* Review Progress Notification */}
+      <ReviewProgressNotification
+        isVisible={isReviewInProgress && !isDismissed}
+        onDismiss={dismissProgress}
       />
+
       </EditorErrorBoundary>
     </div>
   );
 });
 
-EditorPageContent.displayName = 'EditorPageContent';
-
-// Main EditorPage component with EditorModeProvider
-export const EditorPage = memo(() => {
-  const { id } = useParams<{ id: string }>();
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-
-
-  // Listen for suggestions updates from child component
-  useEffect(() => {
-    const handleSuggestionsUpdate = (event: CustomEvent) => {
-      const { suggestions: newSuggestions } = event.detail;
-      setSuggestions(newSuggestions);
-    };
-
-    window.addEventListener('suggestionsUpdated', handleSuggestionsUpdate as EventListener);
-    return () => {
-      window.removeEventListener('suggestionsUpdated', handleSuggestionsUpdate as EventListener);
-    };
-  }, []);
-
-  // Handle suggestion recalculation callback
-  const handleSuggestionRecalculation = useCallback(async (_content: string, _currentSuggestions: Suggestion[]) => {
-
-    // If this is a new post, no suggestions to recalculate
-    if (!id || id === 'new') {
-      return [];
-    }
-
-    try {
-      // Start a new review to get updated suggestions based on content changes
-      await apiService.startReview(id);
-
-      console.log('Started suggestion recalculation for post:', id);
-
-      // Return the current suggestions - they will be updated via the suggestions manager
-      return suggestions;
-    } catch (error) {
-      console.error('Failed to start suggestion recalculation:', error);
-      // Return current suggestions on error
-      return suggestions;
-    }
-  }, [id, suggestions]);
-
-  return (
-    <EditorModeProvider
-      onSuggestionRecalculation={handleSuggestionRecalculation}
-      currentSuggestions={suggestions}
-      postId={id && id !== 'new' ? id : undefined}
-    >
-      <EditorPageContent />
-    </EditorModeProvider>
-  );
-});
+// Rename the component to EditorPage and export it
+export const EditorPage = EditorPageContent;
 
 EditorPage.displayName = 'EditorPage';

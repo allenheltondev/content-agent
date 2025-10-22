@@ -3,6 +3,7 @@ import { marshall } from '@aws-sdk/util-dynamodb';
 import { randomUUID } from 'crypto';
 import { formatResponse } from '../utils/responses.mjs';
 import { incrementPostCount } from '../utils/tenant-statistics.mjs';
+import { getInitialVersion } from '../utils/versioning.mjs';
 
 const ddb = new DynamoDBClient();
 
@@ -37,9 +38,9 @@ export const handler = async (event) => {
         contentId,
         tenantId,
         title,
-        body,
-        status,
-        version: 1,
+        ...body && { body },
+        status: status ?? 'Draft',
+        version: getInitialVersion(),
         createdAt: now,
         updatedAt: now
       }),
@@ -59,7 +60,7 @@ export const handler = async (event) => {
       title: title || '',
       body: body || '',
       status: status || 'draft',
-      version: 1,
+      version: getInitialVersion(),
       createdAt: now,
       updatedAt: now,
       authorId: tenantId

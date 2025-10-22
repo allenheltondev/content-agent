@@ -6,6 +6,7 @@ import { SuggestionActionFeedback } from './SuggestionActionFeedback';
 import type { SuggestionActionFeedback as FeedbackType } from './SuggestionActionButtons';
 import { useActiveSuggestionAreaPositioning } from '../../hooks/useResponsivePositioning';
 import { useActiveSuggestionTransitions } from '../../hooks/useSuggestionTransitions';
+import { useDraggable } from '../../hooks/useDraggable';
 import './ActiveSuggestionArea.css';
 
 /**
@@ -53,6 +54,7 @@ export interface ActiveSuggestionAreaProps {
   avoidElements?: string[]; // Additional elements to avoid overlapping
   enableTransitions?: boolean; // Enable smooth transitions
   transitionDirection?: 'forward' | 'backward' | 'none'; // Direction for transitions
+  onSuggestionResolved?: (suggestionId: string) => void; // Callback for auto-advance
 }
 
 /**
@@ -94,7 +96,7 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
   onReject,
   onEdit,
   isProcessing,
-  className = '',
+  className: _className = '',
   config = {},
   feedback,
   onFeedbackDismiss,
@@ -102,13 +104,10 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
   enableResponsivePositioning = true,
   avoidElements = [],
   enableTransitions = true,
-  transitionDirection = 'none'
+  transitionDirection = 'none',
+  onSuggestionResolved
 }) => {
-  // Do not render until we have an active suggestion
-  if (!activeSuggestion) {
-    return null;
-  }
-  // Merge config with defaults
+  // Merge config with defaults - always call hooks first
   const finalConfig = useMemo(() => ({
     ...DEFAULT_CONFIG,
     ...config,
@@ -161,9 +160,9 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
 
   // Handle suggestion changes for transitions
   useEffect(() => {
-    if (enableTransitions) {
+    if (enableTransitions && activeSuggestion) {
       startTransition(
-        activeSuggestion?.id || null,
+        activeSuggestion.id || null,
         transitionDirection,
         'navigation'
       );
@@ -177,12 +176,7 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
     }
   }, [isProcessing, enableTransitions, startProcessing]);
 
-  // Don't render if no active suggestion and not transitioning
-  if (!activeSuggestion && (!enableTransitions || transitionState.state === 'idle')) {
-    return null;
-  }
-
-  const suggestionColor = getSuggestionTypeColor(activeSuggestion.type);
+  const suggestionColor = activeSuggestion ? getSuggestionTypeColor(activeSuggestion.type) : 'gray';
   const colorTheme = useMemo(() => {
     const map: Record<string, { bg: string; primary: string; chipBg: string; chipText: string }> = {
       blue:   { bg: '#eff6ff', primary: '#3b82f6', chipBg: '#dbeafe', chipText: '#1e40af' },
@@ -197,6 +191,10 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
 
   // Derive safe display values with sensible fallbacks
   const derived = useMemo(() => {
+    if (!activeSuggestion) {
+      return { before: '', originalText: '', after: '', replacement: '', reason: '', priority: 'medium' as const };
+    }
+
     const start = Math.max(0, activeSuggestion.startOffset || 0);
     const end = Math.max(start, activeSuggestion.endOffset || start);
     const content = fullContent || '';
@@ -284,33 +282,55 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
     return getTransitionClasses();
   }, [enableTransitions, getTransitionClasses]);
 
-  // Generate combined styles (positioning + transitions)
+  // Initialize drag functionality for floating position
+  const { dragRef, position: _position, isDragging, handleMouseDown, style: dragStyle } = useDraggable({
+    x: 20, // Initial position from right
+    y: 20  // Initial position from top
+  });
+
+  // Generate combined styles (positioning + transitions + drag)
   const combinedStyles = useMemo(() => {
     const baseStyles = positioningStyles;
     const transitionStyles = enableTransitions ? getTransitionStyles() : {};
+
+    // Use drag position for floating mode, otherwise use responsive positioning
+    if (finalConfig.position === 'floating') {
+      return {
+        ...dragStyle,
+        ...transitionStyles,
+        zIndex: 2000
+      };
+    }
 
     return {
       ...baseStyles,
       ...transitionStyles
     };
-  }, [positioningStyles, enableTransitions, getTransitionStyles]);
+  }, [positioningStyles, enableTransitions, getTransitionStyles, finalConfig.position, dragStyle]);
+
+  // Don't render if no active suggestion and not transitioning
+  if (!activeSuggestion && (!enableTransitions || transitionState.state === 'idle')) {
+    return null;
+  }
 
   return (
     <>
       <div
+        ref={dragRef}
         className={`
-          bg-white rounded-lg shadow-lg border border-gray-200
+          bg-white rounded-lg shadow-lg border
           ${responsiveClassName}
           ${transitionClassName}
-          ${isProcessing ? 'suggestion-resolving' : ''}
-          ${className}
+          ${isProcessing ? 'opacity-75' : ''}
+          ${isDragging ? 'shadow-xl' : ''}
           pointer-events-auto
         `}
-        style={{ ...combinedStyles, zIndex: 2000, pointerEvents: 'auto' }}
+        style={{ ...combinedStyles, pointerEvents: 'auto' }}
         data-suggestion-area="true"
         data-viewport-breakpoint={viewport.breakpoint}
-        data-positioning-strategy={positioning.strategy}
         data-transition-state={transitionState.state}
+        data-positioning-strategy={positioning.strategy}
+        onMouseDown={handleMouseDown}
       >
       {/* Header with navigation context */}
       <div
@@ -320,25 +340,30 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
         <div className="flex items-center space-x-2">
           <div className={`w-3 h-3 rounded-full`} style={{ backgroundColor: colorTheme.primary }} />
           <span className="text-sm font-medium text-gray-900 capitalize">
-            {activeSuggestion.type} Suggestion
+            {activeSuggestion?.type || 'Unknown'} Suggestion
           </span>
           <span
             className="px-2 py-1 text-xs font-medium rounded-full"
             style={{ backgroundColor: colorTheme.chipBg, color: colorTheme.chipText }}
           >
-            {activeSuggestion.priority || 'medium'}
+            {activeSuggestion?.priority || 'medium'}
           </span>
           <span
             className="px-2 py-1 text-xs font-medium rounded-full border"
             style={{ backgroundColor: '#ffffff', color: '#374151', borderColor: '#e5e7eb' }}
           >
-            {activeSuggestion.type}
+            {activeSuggestion?.type || 'unknown'}
           </span>
         </div>
 
-        {/* Navigation indicator */}
-        <div className="text-sm text-gray-600">
-          {navigationContext.currentIndex + 1} of {navigationContext.totalCount}
+        {/* Navigation indicator with active count emphasis */}
+        <div className="flex items-center space-x-2">
+          <div className="text-sm text-gray-600 font-medium">
+            {navigationContext.currentIndex + 1} of {navigationContext.totalCount}
+          </div>
+          <div className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+            {navigationContext.totalCount} active
+          </div>
         </div>
       </div>
 
@@ -396,13 +421,14 @@ export const ActiveSuggestionArea: React.FC<ActiveSuggestionAreaProps> = ({
       {/* Action buttons */}
       <div className="suggestion-actions px-4 py-3 border-t border-gray-200 bg-white rounded-b-lg">
         <SuggestionActionButtons
-          suggestion={activeSuggestion}
+          suggestion={activeSuggestion!}
           onAccept={onAccept}
           onReject={onReject}
           onEdit={onEdit}
           isProcessing={isProcessing}
           allowEditing={true}
           fullContent={fullContent}
+          onSuggestionResolved={onSuggestionResolved}
         />
       </div>
     </div>

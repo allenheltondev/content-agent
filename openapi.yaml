@@ -87,7 +87,7 @@ paths:
 
   /posts/{postId}:
     parameters:
-      - $ref: '#/components/parameters/postId'
+      - $ref: "#/components/parameters/postId"
     get:
       summary: Get specific blog post
       description: Retrieve a specific blog post by ID, ensuring it belongs to the user's tenant
@@ -169,7 +169,7 @@ paths:
 
   /posts/{postId}/suggestions:
     parameters:
-      - $ref: '#/components/parameters/postId'
+      - $ref: "#/components/parameters/postId"
     get:
       summary: Get suggestions for a blog post
       description: Retrieve all suggestions for a specific blog post, ensuring the post belongs to the user's tenant
@@ -186,7 +186,7 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Suggestion"
-                required: [ suggestions ]
+                required: [suggestions]
         401:
           $ref: "#/components/responses/Unauthorized"
         403:
@@ -233,8 +233,8 @@ paths:
 
   /posts/{postId}/suggestions/{suggestionId}/statuses:
     parameters:
-      - $ref: '#/components/parameters/postId'
-      - $ref: '#/components/parameters/suggestionId'
+      - $ref: "#/components/parameters/postId"
+      - $ref: "#/components/parameters/suggestionId"
     post:
       summary: Update suggestion status
       description: Update the status of a specific suggestion (accept, reject, or delete), ensuring it belongs to a post owned by the user's tenant
