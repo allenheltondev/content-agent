@@ -28,7 +28,7 @@ export const useAsyncReview = (options: UseAsyncReviewOptions) => {
 
   const reviewServiceRef = useRef<ReviewService | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-  const fallbackPollingRef = useRef<NodeJS.Timeout | null>(null);
+  const fallbackPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Initialize review service
   const getReviewService = useCallback(() => {
@@ -428,7 +428,6 @@ export const useAsyncReview = (options: UseAsyncReviewOptions) => {
           console.warn('[Review] Subscribe endpoint returned 403. Live updates disabled, fallback polling active.');
           // Don't stop the review process - fallback polling will handle it
           return;
-          break;
         case 'SESSION_NOT_FOUND':
           errorMessage = 'Review session not found or expired. Please start a new review.';
           retryable = false;
