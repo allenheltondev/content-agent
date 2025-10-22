@@ -55,8 +55,8 @@ export const getMostRecentSummary = async (tenantId, contentId) => {
       TableName: process.env.TABLE_NAME,
       KeyConditionExpression: 'pk = :pk AND begins_with(sk, :summaryPrefix)',
       ExpressionAttributeValues: marshall({
-        pk: `${tenantId}#${contentId}`,
-        summaryPrefix: 'summary#'
+        ':pk': `${tenantId}#${contentId}`,
+        ':summaryPrefix': 'summary#'
       })
     }));
 

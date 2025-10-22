@@ -18,6 +18,7 @@ import { ConfirmationModal } from '../components/common/ConfirmationModal';
 import { AppHeader } from '../components/common';
 import { ConflictResolutionModal } from '../components/editor/ConflictResolutionModal';
 import { SimpleSuggestionHighlights } from '../components/editor/SimpleSuggestionHighlights';
+import { ContentSummary } from '../components/editor/ContentSummary';
 
 import { useAsyncReview } from '../hooks/useAsyncReview';
 import { applyResolution, type ConflictData, type ConflictResolution } from '../utils/conflictResolution';
@@ -175,6 +176,9 @@ const EditorPageContent = memo(() => {
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [_expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
 
+  // Summary state
+  const [summary, setSummary] = useState<string | null>(null);
+
   // Simple undo functionality
   const [undoHistory, setUndoHistory] = useState<any[]>([]);
 
@@ -216,16 +220,17 @@ const EditorPageContent = memo(() => {
     try {
       setIsLoadingSuggestions(true);
       const response = await apiService.getSuggestions(post.id);
-      console.log('loadSuggestions function - API returned:', response);
 
       // Extract suggestions array from response object
       const loadedSuggestions = response?.suggestions || response || [];
-      console.log('loadSuggestions function - Extracted suggestions:', loadedSuggestions);
-      console.log('loadSuggestions function - Is array?', Array.isArray(loadedSuggestions));
+
+      // Extract summary from response
+      const loadedSummary = response?.summary || null;
 
       // Safety check: ensure we always set an array
       const safeSuggestions = Array.isArray(loadedSuggestions) ? loadedSuggestions : [];
       setSuggestions(safeSuggestions);
+      setSummary(loadedSummary);
 
       // Automatically validate positions after initial loading (immediate)
       if (safeSuggestions.length > 0 && !hasInitiallyLoadedSuggestions) {
@@ -239,6 +244,7 @@ const EditorPageContent = memo(() => {
       console.error('Failed to load suggestions:', error);
       setSuggestionsError('Failed to load suggestions');
       setSuggestions([]);
+      setSummary(null);
       return [];
     } finally {
       setIsLoadingSuggestions(false);
@@ -254,7 +260,6 @@ const EditorPageContent = memo(() => {
       const validatedSuggestions = validateSuggestionOffsets(suggestions, content);
 
       if (validatedSuggestions.length !== suggestions.length) {
-        console.log(`Silently refreshed suggestion positions: ${suggestions.length} -> ${validatedSuggestions.length}`);
         setSuggestions(validatedSuggestions);
       } else {
         // Check if any suggestions were corrected (same count but different positions)
@@ -268,7 +273,6 @@ const EditorPageContent = memo(() => {
         });
 
         if (hasChanges) {
-          console.log('Silently updated suggestion positions with corrections');
           setSuggestions(validatedSuggestions);
         }
       }
@@ -339,11 +343,7 @@ const EditorPageContent = memo(() => {
         });
       }
 
-      console.log(`Applied suggestion ${suggestionId}:`, {
-        originalSuggestionCount: suggestions.length,
-        updatedSuggestionCount: updatedSuggestions.length,
-        removedOverlapping: suggestions.length - updatedSuggestions.length - 1 // -1 for the accepted suggestion
-      });
+
     } catch (error) {
       console.error('Failed to accept suggestion:', error);
       // Could show error toast here if needed
@@ -396,7 +396,7 @@ const EditorPageContent = memo(() => {
       refreshSuggestionPositions();
     });
 
-    console.log(`Undid suggestion ${lastAction.suggestionId}, restored suggestion to list`);
+
   }, [undoHistory, handleContentChange]);
 
 
@@ -430,7 +430,6 @@ const EditorPageContent = memo(() => {
             );
           })) {
         setSuggestions(validatedSuggestions);
-        console.log('Silently corrected suggestion positions on review mode entry');
       }
     }
 
@@ -455,6 +454,8 @@ const EditorPageContent = memo(() => {
       }
       // Reset progress notification when review completes
       resetProgress();
+      // Switch to review mode to show the suggestions
+      switchToReviewMode();
     },
     onReviewError: (error) => {
       showError(`Review failed: ${error}`);
@@ -510,26 +511,25 @@ const EditorPageContent = memo(() => {
         setContent(loadedPost.body);
 
         // Always try to load suggestions for existing posts
-        console.log('Loading suggestions for post:', loadedPost.id, 'status:', loadedPost.status);
         setIsLoadingSuggestions(true);
         try {
           const response = await apiService.getSuggestions(loadedPost.id);
-          console.log('Post loading - API returned:', response);
 
           // Extract suggestions array from response object
           const loadedSuggestions = response?.suggestions || response || [];
-          console.log('Post loading - Extracted suggestions:', loadedSuggestions);
-          console.log('Post loading - Is array?', Array.isArray(loadedSuggestions));
+
+          // Extract summary from response
+          const loadedSummary = response?.summary || null;
 
           // Safety check: ensure we always set an array
           const safeSuggestions = Array.isArray(loadedSuggestions) ? loadedSuggestions : [];
-          console.log('Post loading - Setting safe suggestions:', safeSuggestions);
           setSuggestions(safeSuggestions);
-          console.log('Post loading - Suggestions state set');
+          setSummary(loadedSummary);
         } catch (error) {
           console.error('Failed to load suggestions:', error);
           setSuggestionsError('Failed to load suggestions');
           setSuggestions([]); // Ensure it's an empty array on error
+          setSummary(null); // Clear summary on error
         } finally {
           setIsLoadingSuggestions(false);
         }
@@ -926,7 +926,6 @@ const EditorPageContent = memo(() => {
               onRetry={() => window.location.reload()}
               onSaveBackup={() => {
                 // Save backup logic would go here
-                console.log('Saving backup...');
               }}
               postId={id || null}
               title={title}
@@ -1041,6 +1040,13 @@ const EditorPageContent = memo(() => {
                           onUndoClick={undoHistory.length > 0 ? undoLastAcceptance : undefined}
                         />
 
+                        {/* Content Summary */}
+                        <ContentSummary
+                          summary={summary || undefined}
+                          isLoading={isLoadingSuggestions}
+                          position="sidebar"
+                          prominence="medium"
+                        />
 
                       </div>
 
@@ -1072,9 +1078,8 @@ const EditorPageContent = memo(() => {
                     onNavigate={suggestionNavigation.navigate}
                     onAccept={acceptSuggestion}
                     onReject={rejectSuggestion}
-                    onEdit={(suggestionId, newText) => {
+                    onEdit={(_suggestionId, _newText) => {
                       // Handle edit functionality if needed
-                      console.log('Edit suggestion:', suggestionId, newText);
                     }}
                     isProcessing={false}
                     fullContent={content}
